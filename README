@@ -1,0 +1,5 @@
+
+CLommand: a library to make interaction with files and external programs as easy
+as it is in bash.
+
+Install as you would any ASDF library.
