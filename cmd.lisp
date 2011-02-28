@@ -87,7 +87,11 @@
                             :wait wait ))))
 
 (defun cmd (command &key input (output (make-string-output-stream)) (wait t))
-  (let ((process (%cmd command input output wait)))
+  (let ((process (%cmd (mkdstr
+                        "cd" (directory-namestring *default-pathname-defaults*)
+                        "&&"
+                        command )
+                       input output wait )))
     (cond ((not wait)
            process )
           ((typep output 'string-stream)
@@ -219,15 +223,15 @@ amicable way.
 
 (set-dispatch-macro-character #\# #\> '|#>-reader|)
 
-(defmacro define-executable-functions (dir)
-  (let ((*readtable* (copy-readtable *readtable*)))
-    (setf (readtable-case *readtable*) :preserve)
-    `(progn
-       ,@(iter (for execucable in-stream (make-string-input-stream
-                                          (cmd (mkstr "ls " dir)) ))
-               (with-gensyms (args)
-                 (collect `(defun ,execucable (&rest ,args)
-                             (cmd (format nil "~a~{ ~a~}" ',execucable ,args)) )))))))
+;; (defmacro define-executable-functions (dir)
+;;   (let ((*readtable* (copy-readtable *readtable*)))
+;;     (setf (readtable-case *readtable*) :preserve)
+;;     `(progn
+;;        ,@(iter (for execucable in-stream (make-string-input-stream
+;;                                           (cmd (mkstr "ls " dir)) ))
+;;                (with-gensyms (args)
+;;                  (collect `(defun ,execucable (&rest ,args)
+;;                              (cmd (format nil "~a~{ ~a~}" ',execucable ,args)) )))))))
 
 ;; (defun |ls| (&rest args)
 ;;   (cmd (format nil "~a ~{~a ~}" '|ls| args)) )
