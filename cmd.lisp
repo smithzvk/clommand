@@ -103,6 +103,9 @@
 (defmethod translate-item (item)
   (format nil "~A" item) )
 
+(defmethod translate-item ((item float))
+  (format nil "~,,,,,,'eG" item) )
+
 (defmethod translate-item ((item pathname))
   (format nil "~A" (namestring item)) )
 
