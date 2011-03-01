@@ -108,8 +108,6 @@
                             :input input :output output
                             :wait wait ))))
 
-(defvar *zap-input-newlines* t)
-
 (defvar *trim-whitespace* t)
 
 (defvar *split-on* nil)
@@ -237,9 +235,6 @@ balance vertical bars.
                           ;; Handle shell commands
                           ((not (or quoted escaped))
                            (case c
-                             (#\Newline
-                                (when *zap-input-newlines*
-                                  (setf c #\Space) ))
                              (#\\ (setf escaped t))
                              (#\" (setf quoted #\"))
                              (#\' (setf quoted #\'))
