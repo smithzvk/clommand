@@ -112,7 +112,9 @@
 
 (defvar *split-on* nil)
 
-(defun cmd (command &key input (output :string) (wait t))
+(defvar *shell-input* nil)
+
+(defun cmd (command &key (input *shell-input*) (output :string) (wait t))
   (when (eql output :string)
     (setf output (make-string-output-stream)) )
   (let ((process (%cmd (mkdstr
@@ -256,14 +258,13 @@ balance vertical bars.
                            (read-char stream t nil t)
                            (push (read stream t nil t) breaker) )))))
     `(let ,(mapcar (/. (x) (list (car x)
-                                `(coerce (translate-item
-                                          ,(cadr x) )
-                                         'list )))
-                      (reverse ext) )
+                                `(translate-item
+                                  (let ((*shell-input* nil)) ,(cadr x)) )))
+            (reverse ext) )
        ,(if breaker
             `(ppcre:split ,(apply #'mkstr breaker)
-                          (cmd (coerce (flatten (list ,@command)) 'string)) )
-            `(cmd (coerce (flatten (list ,@command)) 'string)) ))))
+                          (cmd (mkstr ,@command)) )
+            `(cmd (mkstr ,@command)) ))))
 
 (set-dispatch-macro-character #\# #\> '|#>-reader|)
 
