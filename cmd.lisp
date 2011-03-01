@@ -1,6 +1,26 @@
 
 (in-package :clommand)
 
+;; @There is a concern about having too many open streams at once.  In SBCL,
+;; having the program create a stream for you takes up a new file descriptor for
+;; each call.  These are never reclaimed until explicitly closed.  Having it
+;; write to a string stream, however, doesn't open a new FD, and there is no
+;; problem.
+
+;; @CLISP, on the other hand, appears to do a good job closing unused FDs,
+;; perhaps on garbage collection.  This means that it is very difficult to make
+;; CLISP run out of FDs unless you are activiely using all of them.  This is a
+;; good thing, actually, since CLISP lacks the ability to specify a stream that
+;; you want output to go to, meaning that using an `in memory' string is
+;; impossible unless you wait for completion and slurp all output.
+
+;; @So the interface I propose is one that:
+
+;; @\item By default waits for completion and returns strings, first value
+;; stdout, second value stderr.
+
+;; @\item You may ask it to return a stream to you instead, or ask for a process 
+
 (defvar *environment*)
 
 (defvar *sync-environment*
@@ -8,6 +28,8 @@
      (/. () "PWD=~A" *default-pathname-defaults*)
      (/. (line) (setf *default-pathname-defaults* (fad:pathname-as-directory
                                                   (pathname line) ))))))
+
+#+sbcl(import '(sb-ext:process-output sb-ext:process-input))
 
 ;; In some imps we need to emulate the SBCL/CMUCL/ECL sort of process structure
 #+clisp
@@ -86,7 +108,13 @@
                             :input input :output output
                             :wait wait ))))
 
-(defun cmd (command &key input (output (make-string-output-stream)) (wait t))
+(defvar *trim-whitespace* t)
+
+(defvar *split-on* nil)
+
+(defun cmd (command &key input (output :string) (wait t))
+  (when (eql output :string)
+    (setf output (make-string-output-stream)) )
   (let ((process (%cmd (mkdstr
                         "cd" (directory-namestring *default-pathname-defaults*)
                         "&&"
@@ -95,10 +123,22 @@
     (cond ((not wait)
            process )
           ((typep output 'string-stream)
-           (get-output-stream-string output) )
+           (let ((output (get-output-stream-string output)))
+             (when *trim-whitespace*
+               (setf output (string-trim '(#\Space #\Newline #\Tab) output)) )
+             (when *split-on*
+               (setf output (ppcre:split *split-on* output)) )
+             output ))
           ((eql output :stream)
            (process-output process) )
           (t output) )))
+
+;; @\section{User Interface}
+
+;; Eventhough it goes directly against rules I set for using reader macros, the
+;; main interface for this library is via a reader macro.  I think this is okay
+;; as it really is embedding another language inside CL, and so it really
+;; deserves its own reader.
 
 (defmethod translate-item (item)
   (format nil "~A" item) )
@@ -134,8 +174,8 @@ Finally, if immediately after the closing parentheses, you place /form, the
 output of the command will be sent through a PPCRE:SPLIT command.  Think of this
 as fiddling with IFS.  Basically, the shell tokenizes input based on whatever is
 in IFS.  This allows you to do the same.  Command/#\Newline splits into lines,
-command/"\\s+" splits on any whitespace, command/"\\n\\s*\\n+" breaks whenever a
-blank line is detected.
+command/"\\s+" splits on any whitespace, command/"\\n\\s*\\n+" breaks whenever
+one or more blank lines are detected.
 
 Note: Piping in your shell code confuses SLIME's approximation of the Common
 Lisp's reader.  I am considering including an alternate syntax that will involve
@@ -143,7 +183,8 @@ quotes hinting to slime that this isn't Lisp syntax it's reading.  Things work
 if you use M-x slime-eval-region or M-x slime-eval-file and for some reason if
 you evaluate only one toplevel form in the REPL, it works there as well.  I am
 hoping that my forthcomming piping mechanism will remove this deficiency in an
-amicable way.
+amicable way.  As a work around, just pipe the output to "cat" in order to
+balance vertical bars.
 """
   (declare (ignore subchar arg))
   (let* ((escaped nil)
