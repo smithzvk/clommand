@@ -73,9 +73,13 @@ balance vertical bars.
                                  (next (peek-char nil stream nil nil t)) )
                              (case next
                                (#\@ (read-char stream nil nil t)
-                                  (push (list sym `(apply #'mkdstr
-                                                          ,(read stream t nil t) ))
-                                        ext ))
+                                  (push
+                                   (list sym `(apply #'mkdstr
+                                                     ,(read-preserving-whitespace
+                                                       stream t nil
+                                                       #+clisp nil
+                                                       #-clisp t )))
+                                   ext ))
                                (otherwise
                                   (let ((possible-delim
                                          (read-char stream t nil t)))
@@ -83,9 +87,14 @@ balance vertical bars.
                                                 (peek-char nil stream nil nil t) )
                                            ;; This is a delimiter
                                            (read-char stream t nil t)
-                                           (push (list sym `(apply #'mkdstr* ,possible-delim
-                                                                   ,(read stream t nil t) ))
-                                                 ext ))
+                                           (push
+                                            (list sym `(apply
+                                                        #'mkdstr* ,possible-delim
+                                                        ,(read-preserving-whitespace
+                                                          stream t nil
+                                                          #+clisp nil
+                                                          #-clisp t )))
+                                            ext ))
                                           (t
                                            ;; Concatenate the possible-delim
                                            ;; character onto the beginning of
@@ -95,8 +104,12 @@ balance vertical bars.
                                                           (make-string-input-stream
                                                            (mkstr possible-delim) )
                                                           stream )))
-                                             (push (list sym (read stream t nil t))
-                                                   ext )))))))
+                                             (push
+                                              (list sym (read-preserving-whitespace
+                                                         stream t nil
+                                                         #+clisp nil
+                                                         #-clisp t ))
+                                              ext )))))))
                              (setf c sym) ))
                           ;; Handle shell commands
                           ((not (or quoted escaped))
