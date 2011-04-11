@@ -18,21 +18,26 @@
              (%pipe (cdr commands) pipe output) ))))
 
 (defun %cmd (command input output wait)
+  (when (and (not wait) (typep output 'string-stream))
+    (warn "SBCL doesn't handle specifying string-streams for output when you are not going to wait."))
   (let ((%input (cond ((typep input 'string)
                        (make-string-input-stream input) )
-                      (t input) )))
-    (let ((%output (cond ((eql output :string)
-                          (make-string-output-stream) )
-                         (t output) )))
-      (let ((process (sb-ext:run-program "bash" (list "-c" command)
-                                         :search t
-                                         :if-input-does-not-exist :error
-                                         :input %input
-                                         :output %output
-                                         :wait (if (or (eql output :stream)
-                                                       (typep output 'stream) )
-                                                   wait
-                                                   t ))))
-        (cond ((eql output :string) (get-output-stream-string
-                                     (print %output) ))
-              ((eql output :stream) (process-output process)) )))))
+                      (t input) ))
+        (%output (cond ((eql output :string)
+                        (make-string-output-stream) )
+                       (t output) )))
+    (let ((process (sb-ext:run-program "bash" (list "-c" command)
+                                       :search t
+                                       :if-input-does-not-exist :error
+                                       :input %input
+                                       :output %output
+                                       :wait (if (eql output :string)
+                                                 t
+                                                 wait ))))
+      (make-cmd-process
+       :input (cond ((eql input :stream)
+                     (process-input process) )
+                    (t %input) )
+       :output (cond ((eql output :string)
+                      (get-output-stream-string %output) )
+                     (t (process-output process)) )))))

@@ -59,23 +59,34 @@
 
 (defvar *shell-input* nil)
 
+(defstruct cmd-process
+  input output )
+
 (defun cmd (command &key (input *shell-input*) (output :string) (wait t))
-  (when (eql output :string)
-    (setf output (make-string-output-stream)) )
+  "Input streams must be closed before output streams (in SBCL)."
+  (when (and (eql input :stream) wait)
+    (error "Waiting for shell to exit but also providing interactive input.  How does this make sense?") )
   (let ((process (%cmd (mkdstr
                         "cd" (directory-namestring *default-pathname-defaults*)
                         "&&"
                         command )
                        input output wait )))
+    ;; Give simple output
     (cond ((not wait)
+           ;; This clause holds many of the complicated use cases.  Almost
+           ;; anytime you need to specify a stream for input or output, this is
+           ;; where you'll end up.
            process )
-          ((typep output 'string-stream)
-           (let ((output (get-output-stream-string output)))
+          ((eql output :string)
+           (let ((output (cmd-process-output process)))
              (when *trim-whitespace*
                (setf output (string-trim '(#\Space #\Newline #\Tab) output)) )
              (when *split-on*
                (setf output (ppcre:split *split-on* output)) )
              output ))
           ((eql output :stream)
-           (process-output process) )
+           (cmd-process-output process) )
           (t output) )))
+
+;; (defmacro with-cmd-options ((&key (wait t) input (output :string)) &body commands)
+;;   (
