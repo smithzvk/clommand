@@ -17,6 +17,27 @@
 (defmethod translate-item ((item pathname))
   (format nil "~A" (namestring item)) )
 
+(defun compile-char-lists (compilation cmd)
+  (cond ((null cmd)
+         (reverse
+          (if (consp (first compilation))
+              (cons (coerce (reverse (first compilation)) 'string) (rest compilation))
+              compilation )))
+        ((characterp (first cmd))
+         (if (consp (first compilation))
+             (compile-char-lists (cons (cons (first cmd) (first compilation))
+                                       (rest compilation) )
+                                 (rest cmd) )
+             (compile-char-lists (cons (list (first cmd)) compilation)
+                                 (rest cmd) )))
+        (t (compile-char-lists
+            (cons (first cmd)
+                  (if (consp (first compilation))
+                      (cons (coerce (reverse (first compilation)) 'string)
+                            (rest compilation) )
+                      compilation ))
+            (rest cmd) ))))
+
 (defun |#>-reader| (stream subchar arg)
   """
 Read a `form' that will be sent to a shell for execution.  We will read in
@@ -62,80 +83,83 @@ balance vertical bars.
          (breaker nil)
          ;; A stupid parser, all it need to do is match parentheses when things
          ;; can be escaped.
-         (command (iter (for c = (read-char stream t nil t))
-                        (while c)
-                        (cond
-                          ;; Handle Lisp forms, this is really the only
-                          ;; complicated bit
-                          ((and (not escaped)
-                                (eql c #\,) )
-                           (let ((sym (gensym))
-                                 (next (peek-char nil stream nil nil t)) )
-                             (case next
-                               (#\@ (read-char stream nil nil t)
-                                  (push
-                                   (list sym `(apply #'mkdstr
-                                                     ,(read-preserving-whitespace
-                                                       stream t nil
-                                                       #+clisp nil
-                                                       #-clisp t )))
-                                   ext ))
-                               (otherwise
-                                  (let ((possible-delim
-                                         (read-char stream t nil t)))
-                                    (cond ((eql #\@
-                                                (peek-char nil stream nil nil t) )
-                                           ;; This is a delimiter
-                                           (read-char stream t nil t)
-                                           (push
-                                            (list sym `(apply
-                                                        #'mkdstr* ,possible-delim
-                                                        ,(read-preserving-whitespace
-                                                          stream t nil
-                                                          #+clisp nil
-                                                          #-clisp t )))
-                                            ext ))
-                                          (t
-                                           ;; Concatenate the possible-delim
-                                           ;; character onto the beginning of
-                                           ;; the input as it is not, in, fact,
-                                           ;; a delimiter
-                                           (let ((stream (make-concatenated-stream
-                                                          (make-string-input-stream
-                                                           (mkstr possible-delim) )
-                                                          stream )))
-                                             (push
-                                              (list sym (read-preserving-whitespace
-                                                         stream t nil
-                                                         #+clisp nil
-                                                         #-clisp t ))
-                                              ext )))))))
-                             (setf c sym) ))
-                          ;; Handle shell commands
-                          ((not (or quoted escaped))
-                           (case c
-                             (#\\ (setf escaped t))
-                             (#\" (setf quoted #\"))
-                             (#\' (setf quoted #\'))
-                             (#\( (incf paren-level))
-                             (#\) (decf paren-level)) ))
-                          ;; End quoted state if necessary
-                          ((eql quoted c)
-                           (setf quoted nil) )
-                          ;; End escaped state always on the next character
-                          ;; (which is this one)
-                          (escaped
-                           (setf escaped nil) )
-                          ;; This is here to catch the case where we have a
-                          ;; backslash in a quoted environment.
-                          ((eql #\\ c)
-                           (setf escaped t) ))
-                        (collect c)
-                        (while (> paren-level 0))
-                        (finally
-                         (when (eql #\/ (peek-char nil stream nil nil t))
-                           (read-char stream t nil t)
-                           (push (read stream t nil t) breaker) )))))
+         (command
+          (compile-char-lists
+           nil
+           (iter (for c = (read-char stream t nil t))
+                 (while c)
+                 (cond
+                   ;; Handle Lisp forms, this is really the only
+                   ;; complicated bit
+                   ((and (not escaped)
+                         (eql c #\,) )
+                    (let ((sym (gensym))
+                          (next (peek-char nil stream nil nil t)) )
+                      (case next
+                        (#\@ (read-char stream nil nil t)
+                           (push
+                            (list sym `(apply #'mkdstr
+                                              ,(read-preserving-whitespace
+                                                stream t nil
+                                                #+clisp nil
+                                                #-clisp t )))
+                            ext ))
+                        (otherwise
+                           (let ((possible-delim
+                                  (read-char stream t nil t)))
+                             (cond ((eql #\@
+                                         (peek-char nil stream nil nil t) )
+                                    ;; This is a delimiter
+                                    (read-char stream t nil t)
+                                    (push
+                                     (list sym `(apply
+                                                 #'mkdstr* ,possible-delim
+                                                 ,(read-preserving-whitespace
+                                                   stream t nil
+                                                   #+clisp nil
+                                                   #-clisp t )))
+                                     ext ))
+                                   (t
+                                    ;; Concatenate the possible-delim
+                                    ;; character onto the beginning of
+                                    ;; the input as it is not, in, fact,
+                                    ;; a delimiter
+                                    (let ((stream (make-concatenated-stream
+                                                   (make-string-input-stream
+                                                    (mkstr possible-delim) )
+                                                   stream )))
+                                      (push
+                                       (list sym (read-preserving-whitespace
+                                                  stream t nil
+                                                  #+clisp nil
+                                                  #-clisp t ))
+                                       ext )))))))
+                      (setf c sym) ))
+                   ;; Handle shell commands
+                   ((not (or quoted escaped))
+                    (case c
+                      (#\\ (setf escaped t))
+                      (#\" (setf quoted #\"))
+                      (#\' (setf quoted #\'))
+                      (#\( (incf paren-level))
+                      (#\) (decf paren-level)) ))
+                   ;; End quoted state if necessary
+                   ((eql quoted c)
+                    (setf quoted nil) )
+                   ;; End escaped state always on the next character
+                   ;; (which is this one)
+                   (escaped
+                    (setf escaped nil) )
+                   ;; This is here to catch the case where we have a
+                   ;; backslash in a quoted environment.
+                   ((eql #\\ c)
+                    (setf escaped t) ))
+                 (collect c)
+                 (while (> paren-level 0))
+                 (finally
+                  (when (eql #\/ (peek-char nil stream nil nil t))
+                    (read-char stream t nil t)
+                    (push (read stream t nil t) breaker) ))))))
     `(let ,(mapcar (/. (x) (list (car x)
                                 `(translate-item
                                   (let ((*shell-input* nil)) ,(cadr x)) )))
