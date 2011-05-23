@@ -63,9 +63,12 @@
                         (with-open-stream (echo (make-echo-stream in %output))
                           (iter (for c = (read-char echo nil nil))
                                 (while c) )))
-                      (cond ((eql output :stream) in)
+                      (cond ((eql output :stream)
+                             (make-cmd-process :output in) )
                             ((eql output :string)
-                             (get-output-stream-string %output) )))
+                             (make-cmd-process
+                              :output
+                              (get-output-stream-string %output) ))))
                  (unless (eql :stream %output) (close in)) )))
         (when (typep %output 'stream)
           (close %output) )))))
