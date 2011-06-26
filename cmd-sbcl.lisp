@@ -1,6 +1,6 @@
 (in-package :cmd)
 
-(import '(sb-ext:process-output sb-ext:process-input))
+;; (import '(sb-ext:process-output sb-ext:process-input))
 
 (defun %pipe (commands input output)
   (cond ((null commands)
@@ -36,8 +36,8 @@
                                                  wait ))))
       (make-cmd-process
        :input (cond ((eql input :stream)
-                     (process-input process) )
+                     (sb-ext:process-input process) )
                     (t %input) )
        :output (cond ((eql output :string)
                       (get-output-stream-string %output) )
-                     (t (process-output process)) )))))
+                     (t (sb-ext:process-output process)) )))))
