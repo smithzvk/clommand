@@ -62,6 +62,10 @@ Is the way things must be written.  With this turned off." )
 
 (defun |#>-reader| (stream subchar arg)
   """
+The `#>' reader allows shell commands to be executed from Common Lisp programs.
+Use shell commands as if they are normal Lisp functions \(except see below as
+how parameters are inserted into your shell commands).
+
 Read a `form' that will be sent to a shell for execution.  We will read in
 characters and pass them directly to the shell except when we find a #\,.
 Commas are treated as insertion points for Lisp expressions.  Put any form in
