@@ -20,10 +20,10 @@ unwanted newlines when there are line breaks in your shell code, but not the Lis
  #>(do something \
        ,(some-lisp 
          blah
-         blech ) \
-     more shell stuff )
+         blech) \
+     more shell stuff)
 
-Is the way things must be written.  With this turned off." )
+Is the way things must be written.  With this turned off.")
 
 ;; Eventhough it goes directly against rules I set for using reader macros, the
 ;; main interface for this library is via a reader macro.  I think this is okay
@@ -31,34 +31,34 @@ Is the way things must be written.  With this turned off." )
 ;; deserves its own reader.
 
 (defmethod translate-item (item)
-  (format nil "~A" item) )
+  (format nil "~A" item))
 
 (defmethod translate-item ((item float))
-  (format nil "~,,,,,,'eG" item) )
+  (format nil "~,,,,,,'eG" item))
 
 (defmethod translate-item ((item pathname))
-  (format nil "~A" (namestring item)) )
+  (format nil "~A" (namestring item)))
 
 (defun compile-char-lists (compilation cmd)
   (cond ((null cmd)
          (reverse
           (if (consp (first compilation))
               (cons (coerce (reverse (first compilation)) 'string) (rest compilation))
-              compilation )))
+              compilation)))
         ((characterp (first cmd))
          (if (consp (first compilation))
              (compile-char-lists (cons (cons (first cmd) (first compilation))
-                                       (rest compilation) )
-                                 (rest cmd) )
+                                       (rest compilation))
+                                 (rest cmd))
              (compile-char-lists (cons (list (first cmd)) compilation)
-                                 (rest cmd) )))
+                                 (rest cmd))))
         (t (compile-char-lists
             (cons (first cmd)
                   (if (consp (first compilation))
                       (cons (coerce (reverse (first compilation)) 'string)
-                            (rest compilation) )
-                      compilation ))
-            (rest cmd) ))))
+                            (rest compilation))
+                      compilation))
+            (rest cmd)))))
 
 (defun |#>-reader| (stream subchar arg)
   """
@@ -118,9 +118,9 @@ balance vertical bars.
                 ;; Handle Lisp forms, this is really the only
                 ;; complicated bit
                 ((and (not escaped)
-                      (eql c #\,) )
+                      (eql c #\,))
                  (let ((sym (gensym))
-                       (next (peek-char nil stream nil nil t)) )
+                       (next (peek-char nil stream nil nil t)))
                    (case next
                      (#\@ (read-char stream nil nil t)
                       (push
@@ -128,13 +128,13 @@ balance vertical bars.
                                          ,(read-preserving-whitespace
                                            stream t nil
                                            #+clisp nil
-                                           #-clisp t )))
-                       ext ))
+                                           #-clisp t)))
+                       ext))
                      (otherwise
                       (let ((possible-delim
                               (read-char stream t nil t)))
                         (cond ((eql #\@
-                                    (peek-char nil stream nil nil t) )
+                                    (peek-char nil stream nil nil t))
                                ;; This is a delimiter
                                (read-char stream t nil t)
                                (push
@@ -143,8 +143,8 @@ balance vertical bars.
                                             ,(read-preserving-whitespace
                                               stream t nil
                                               #+clisp nil
-                                              #-clisp t )))
-                                ext ))
+                                              #-clisp t)))
+                                ext))
                               (t
                                ;; Concatenate the possible-delim
                                ;; character onto the beginning of
@@ -152,15 +152,15 @@ balance vertical bars.
                                ;; a delimiter
                                (let ((stream (make-concatenated-stream
                                               (make-string-input-stream
-                                               (mkstr possible-delim) )
-                                              stream )))
+                                               (mkstr possible-delim))
+                                              stream)))
                                  (push
                                   (list sym (read-preserving-whitespace
                                              stream t nil
                                              #+clisp nil
-                                             #-clisp t ))
-                                  ext )))))))
-                   (setf c sym) ))
+                                             #-clisp t))
+                                  ext)))))))
+                   (setf c sym)))
                 ;; Handle shell commands
                 ((not (or quoted escaped))
                  (case c
@@ -168,28 +168,28 @@ balance vertical bars.
                    (#\" (setf quoted #\"))
                    (#\' (setf quoted #\'))
                    (#\( (incf paren-level))
-                   (#\) (decf paren-level)) ))
+                   (#\) (decf paren-level))))
                 ;; End quoted state if necessary
                 ((eql quoted c)
-                 (setf quoted nil) )
+                 (setf quoted nil))
                 ;; End escaped state always on the next character
                 ;; (which is this one)
                 (escaped
-                 (setf escaped nil) )
+                 (setf escaped nil))
                 ;; This is here to catch the case where we have a
                 ;; backslash in a quoted environment.
                 ((eql #\\ c)
-                 (setf escaped t) ))
+                 (setf escaped t)))
               (collect c)
               (while (> paren-level 0))
               (finally
                (when (eql #\/ (peek-char nil stream nil nil t))
                  (read-char stream t nil t)
-                 (push (read stream t nil t) breaker) ))))))
+                 (push (read stream t nil t) breaker)))))))
     `(let ,(mapcar (/. (x) (list (car x)
                                 `(translate-item
-                                  (let ((*shell-input* nil)) ,(cadr x)) )))
-                   (reverse ext) )
+                                  (let ((*shell-input* nil)) ,(cadr x)))))
+                   (reverse ext))
        ,(let ((command-form
                 `(if *remove-newlines*
                      (cmd (apply 'mkstr
@@ -197,12 +197,12 @@ balance vertical bars.
                                   (lambda (x)
                                     (if (stringp x)
                                         (substitute #\Space #\Newline x)
-                                        x ))
+                                        x))
                                   ,(cons 'list command))))
-                     (cmd (mkstr ,@command)) )))
+                     (cmd (mkstr ,@command)))))
           (if breaker
               `(ppcre:split ,(apply #'mkstr breaker)
-                            ,command-form )
-              command-form )))))
+                            ,command-form)
+              command-form)))))
 
 (set-dispatch-macro-character #\# #\> '|#>-reader|)

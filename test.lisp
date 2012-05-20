@@ -1,7 +1,7 @@
 
 (defpackage :clommand-test
   (:use :cl :stefil :iterate)
-  (:export #:shell-test) )
+  (:export #:shell-test))
 
 (in-package :clommand-test)
 

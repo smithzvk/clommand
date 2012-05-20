@@ -12,8 +12,8 @@
                 #+clisp "cmd-clisp"
                 #+ecl "cmd-ecl"
                 #+ccl "cmd-ccl"
-                #+abcl "cmd-abcl" )
+                #+abcl "cmd-abcl")
                (:file "cmd")
-               (:file "reader-macro") )
+               (:file "reader-macro"))
   :serial t
-  :depends-on (:toolbox :iterate :cl-fad :cl-ppcre) )
+  :depends-on (:toolbox :iterate :cl-fad :cl-ppcre))
