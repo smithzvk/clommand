@@ -15,15 +15,25 @@ This only applies to the reader macro interface; not to CMD.
 However, if you don't desire this behavior, you may bind it to NIL for the
 duration of the `#>' command form \(newline removal happens are runtime, not
 readtime).  Be aware that if you do so, you are responsible for escaping
-unwanted newlines when there are line breaks in your shell code, but not the Lisp code \(including comma evaluated forms).  For instance:
+unwanted newlines when there are line breaks in your shell code, but not the
+Lisp code \(including comma evaluated forms).  For instance:
 
- #>(do something \
+ #>(shell-command \
        ,(some-lisp 
          blah
          blech) \
-     more shell stuff)
+     more shell stuff
+     another-command)
 
-Is the way things must be written.  With this turned off.")
+With *remove-newlines* non-nil, the command above could look like:
+
+ #>(shell-command
+       ,(some-lisp
+         blah
+         blech)
+     more shell stuff;
+     another-command)
+")
 
 ;; Eventhough it goes directly against rules I set for using reader macros, the
 ;; main interface for this library is via a reader macro.  I think this is okay
