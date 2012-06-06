@@ -241,31 +241,23 @@ balance vertical bars.
                                   (let ((*shell-input* nil)) ,(cadr x)))))
                    (reverse ext))
        ,(let ((command-form
-                `(if *remove-newlines*
-                     (cmd (apply 'mkstr
+                `(cmd (if *remove-newlines*
+                          (apply 'mkstr
                                  (mapcar
                                   (lambda (x)
                                     (if (stringp x)
                                         (substitute #\Space #\Newline x)
                                         x))
                                   ,(cons 'list command)))
-                          :wait ,(cmd-control-foreground control)
-                          :output ,(if (cmd-control-foreground control)
-                                       :string
-                                       nil)
-                          :error-on-exit-code ,(cmd-control-error-on-exit-code control)
-                          :error-unless-exit-code
-                          ,(cmd-control-error-unless-exit-code control)
-                          :split-on ,(if breaker (apply #'mkstr breaker)))
-                     (cmd (mkstr ,@command)
-                          :wait ,(cmd-control-foreground control)
-                          :output ,(if (cmd-control-foreground control)
-                                       :string
-                                       nil)
-                          :error-on-exit-code ,(cmd-control-error-on-exit-code control)
-                          :error-unless-exit-code
-                          ,(cmd-control-error-unless-exit-code control)
-                          :split-on ,(if breaker (apply #'mkstr breaker))))))
+                          (mkstr ,@command))
+                      :wait ,(cmd-control-foreground control)
+                      :output ,(if (cmd-control-foreground control)
+                                   :string
+                                   nil)
+                      :error-on-exit-code ,(cmd-control-error-on-exit-code control)
+                      :error-unless-exit-code
+                      ,(cmd-control-error-unless-exit-code control)
+                      :split-on ,(if breaker (apply #'mkstr breaker)))))
           command-form))))
 
 (defun reader-wrapper (&rest args)
