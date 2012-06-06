@@ -73,7 +73,7 @@ With *remove-newlines* non-nil, the command above could look like:
 (defun |#>-reader| (stream subchar arg)
   """
 The `#>' reader allows shell commands to be executed from Common Lisp programs.
-Use shell commands as if they are normal Lisp functions \(except see below as
+Use shell commands as if they are normal Lisp functions (except see below as
 how parameters are inserted into your shell commands).
 
 Read a `form' that will be sent to a shell for execution.  We will read in
@@ -208,11 +208,10 @@ balance vertical bars.
                                     (if (stringp x)
                                         (substitute #\Space #\Newline x)
                                         x))
-                                  ,(cons 'list command))))
-                     (cmd (mkstr ,@command)))))
-          (if breaker
-              `(ppcre:split ,(apply #'mkstr breaker)
-                            ,command-form)
-              command-form)))))
+                                  ,(cons 'list command)))
+                          :split-on ,(if breaker (apply #'mkstr breaker)))
+                     (cmd (mkstr ,@command)
+                          :split-on ,(if breaker (apply #'mkstr breaker))))))
+          command-form))))
 
 (set-dispatch-macro-character #\# #\> '|#>-reader|)

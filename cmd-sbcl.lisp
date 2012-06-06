@@ -40,4 +40,6 @@
                     (t %input))
        :output (cond ((eql output :string)
                       (get-output-stream-string %output))
-                     (t (sb-ext:process-output process)))))))
+                     (t (sb-ext:process-output process)))
+       :error nil
+       :process-obj process))))

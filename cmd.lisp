@@ -53,6 +53,13 @@
 ;;   (with-open-stream 
 ;;       (%cmd command :output 
 
+(defun %mkdstr (delim &rest args)
+  "Make delimited string"
+  (with-output-to-string (out)
+    (iter (for a in args)
+      (unless (first-iteration-p)
+        (princ (stringify delim) out))
+      (princ a out))))
 (defvar *trim-whitespace* t)
 
 (defvar *split-on* nil)
@@ -60,13 +67,22 @@
 (defvar *shell-input* nil)
 
 (defstruct cmd-process
-  input output)
+  input output error process-obj)
 
-(defun cmd (command &key (input *shell-input*) (output :string) (wait t))
+(defun cmd-process-exit-code (process)
+  (sb-impl::process-exit-code (cmd-process-process-obj process)))
+
+(defun cmd (command &key (input *shell-input*) (output :string) (wait t)
+                         (split-on nil) (trim-whitespace t)
+                         error-on-exit-code
+                         error-unless-exit-code
+                         exit-code-hook)
   "Input streams must be closed before output streams (in SBCL)."
   (when (and (eql input :stream) wait)
-    (error "Waiting for shell to exit but also providing interactive input.  How does this make sense?"))
-  (let ((process (%cmd (mkdstr
+    (error "Waiting for shell to exit but also providing interactive input.  ~
+            How does this make sense?"))
+  (let ((process (%cmd (%mkdstr
+                        " "
                         "cd" (directory-namestring *default-pathname-defaults*)
                         "&&"
                         command)
@@ -77,16 +93,34 @@
            ;; anytime you need to specify a stream for input or output, this is
            ;; where you'll end up.
            process)
-          ((eql output :string)
-           (let ((output (cmd-process-output process)))
-             (when *trim-whitespace*
-               (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
-             (when *split-on*
-               (setf output (ppcre:split *split-on* output)))
-             output))
-          ((eql output :stream)
-           (cmd-process-output process))
-          (t output))))
+          (t
+           (when (and error-unless-exit-code
+                      (not (= error-unless-exit-code
+                              (cmd-process-exit-code process))))
+             (error "Command ~S exited with code ~A (instead of ~A)"
+                    command
+                    (cmd-process-exit-code process)
+                    error-unless-exit-code))
+           (when (and error-on-exit-code
+                      (= error-on-exit-code
+                         (cmd-process-exit-code process)))
+             (error "Command ~S exited with code ~A"
+                    command
+                    (cmd-process-exit-code process)))
+           (when exit-code-hook 
+             (iter (for fn in (alexandria:ensure-list exit-code-hook))
+               (funcall fn (cmd-process-exit-code process))))
+           (cond
+             ((eql output :string)
+              (let ((output (cmd-process-output process)))
+                (when trim-whitespace
+                  (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
+                (when split-on
+                  (setf output (ppcre:split split-on output)))
+                output))
+             ((eql output :stream)
+              (cmd-process-output process))
+             (t output))))))
 
 ;; (defmacro with-cmd-options ((&key (wait t) input (output :string)) &body commands)
 ;;   (
