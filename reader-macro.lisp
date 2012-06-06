@@ -254,9 +254,12 @@ balance vertical bars.
                       :output ,(if (cmd-control-foreground control)
                                    :string
                                    nil)
-                      :error-on-exit-code ,(cmd-control-error-on-exit-code control)
-                      :error-unless-exit-code
-                      ,(cmd-control-error-unless-exit-code control)
+                      :error-on-exit-codes
+                      ,(and (cmd-control-error-on-exit-code control)
+                            `(list ,(cmd-control-error-on-exit-code control)))
+                      :error-unless-exit-codes
+                      ,(and (cmd-control-error-unless-exit-code control)
+                            `(list ,(cmd-control-error-unless-exit-code control)))
                       :split-on ,(if breaker (apply #'mkstr breaker)))))
           command-form))))
 

@@ -106,8 +106,8 @@
 
 (defun cmd (command &key (input *shell-input*) (output :string) (wait t)
                          (split-on nil) (trim-whitespace t)
-                         error-on-exit-code
-                         error-unless-exit-code
+                         error-on-exit-codes
+                         error-unless-exit-codes
                          exit-code-hook)
   "Input streams must be closed before output streams (in SBCL)."
   (when (and (eql input :stream) wait)
@@ -126,20 +126,21 @@
            ;; where you'll end up.
            process)
           (t
-           (when (and error-unless-exit-code
-                      (not (= error-unless-exit-code
-                              (cmd-process-exit-code process))))
-             (error "Command ~S exited with code ~A (instead of ~A)"
+           (when (and error-unless-exit-codes
+                      (not (member (cmd-process-exit-code process)
+                                   error-unless-exit-codes)))
+             (error "Command ~S exited with code ~A instead of one of ~A"
                     command
                     (cmd-process-exit-code process)
-                    error-unless-exit-code))
-           (when (and error-on-exit-code
-                      (= error-on-exit-code
-                         (cmd-process-exit-code process)))
-             (error "Command ~S exited with code ~A"
+                    error-unless-exit-codes))
+           (when (and error-on-exit-codes
+                      (member (cmd-process-exit-code process)
+                              error-on-exit-codes))
+             (error "Command ~S exited with code ~A which is one of ~A"
                     command
-                    (cmd-process-exit-code process)))
-           (when exit-code-hook 
+                    (cmd-process-exit-code process)
+                    error-on-exit-codes))
+           (when exit-code-hook
              (iter (for fn in (alexandria:ensure-list exit-code-hook))
                (funcall fn (cmd-process-exit-code process))))
            (cond
