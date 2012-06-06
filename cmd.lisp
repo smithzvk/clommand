@@ -192,23 +192,20 @@
     (when exit-code-hook
       (iter (for fn in (alexandria:ensure-list exit-code-hook))
         (funcall fn (cmd-process-exit-code process))))
-    (cond (true-vals
-           (if (member (cmd-process-exit-code process) true-vals)
-               (let ((output (cmd-process-output process)))
-                 (when trim-whitespace
-                   (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
-                 (when split-on
-                   (setf output (ppcre:split split-on output)))
-                 output)
-               nil))
-          (false-vals
-           (if (not (member (cmd-process-exit-code process) false-vals))
-               (let ((output (cmd-process-output process)))
-                 (when trim-whitespace
-                   (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
-                 (when split-on
-                   (setf output (ppcre:split split-on output)))
-                 output)
-               nil)))))
+    (let ((output (cmd-process-output process)))
+      (when trim-whitespace
+        (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
+      (when split-on
+        (setf output (ppcre:split split-on output)))
+      (cond (true-vals
+             (if (member (cmd-process-exit-code process) true-vals)
+                 output
+                 nil))
+            (false-vals
+             (if (not (member (cmd-process-exit-code process) false-vals))
+                 output
+                 nil))))))
+
+
 ;; (defmacro with-cmd-options ((&key (wait t) input (output :string)) &body commands)
 ;;   (
