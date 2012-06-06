@@ -70,6 +70,42 @@ With *remove-newlines* non-nil, the command above could look like:
                       compilation))
             (rest cmd)))))
 
+(defstruct cmd-control
+  predicate-mode
+  (foreground t)
+  (stderr-in-stdout t)
+  (stderr :warn)
+  error-unless-exit-code error-on-exit-code)
+
+(defun int-char-p (char)
+  (or (digit-char-p char)
+      (member char '(#\- #\+))))
+
+(defun parse-control-string (control-string)
+  (let ((control (make-cmd-control)))
+    (with-input-from-string (in control-string)
+      (iter (for c in-stream in using 'read-char)
+        (case c
+          ((#\x #\X)
+           (let ((! (eql #\! (peek-char nil in nil))))
+             (when ! (read-char in nil))
+             (let ((arg (let ((arg
+                                (iter (while (ignore-errors
+                                              (int-char-p
+                                               (peek-char nil in nil))))
+                                  (collect (read-char in nil) result-type 'string))))
+                          (if (equal arg "")
+                              0
+                              (read-from-string arg)))))
+               (if !
+                   (setf (cmd-control-error-on-exit-code control) arg)
+                   (setf (cmd-control-error-unless-exit-code control) arg)))))
+          ((#\&) (setf (cmd-control-foreground control) nil))
+          ((#\e #\E) (setf (cmd-control-stderr control) :error))
+          ((#\w #\W) (setf (cmd-control-stderr control) :warn))
+          ((#\p) (setf (cmd-control-predicate-mode control) t)))))
+    control))
+
 (defun |#>-reader| (stream subchar arg)
   """
 The `#>' reader allows shell commands to be executed from Common Lisp programs.
@@ -117,6 +153,10 @@ balance vertical bars.
          (paren-level 0)
          (ext nil)
          (breaker nil)
+         (control
+           (parse-control-string
+            (iter (until (equal #\( (peek-char nil stream t nil t)))
+              (collect (read-char stream t nil t) result-type 'string))))
          ;; A stupid parser, all it need to do is match parentheses when things
          ;; can be escaped.
          (command
@@ -209,9 +249,26 @@ balance vertical bars.
                                         (substitute #\Space #\Newline x)
                                         x))
                                   ,(cons 'list command)))
+                          :wait ,(cmd-control-foreground control)
+                          :output ,(if (cmd-control-foreground control)
+                                       :string
+                                       nil)
+                          :error-on-exit-code ,(cmd-control-error-on-exit-code control)
+                          :error-unless-exit-code
+                          ,(cmd-control-error-unless-exit-code control)
                           :split-on ,(if breaker (apply #'mkstr breaker)))
                      (cmd (mkstr ,@command)
+                          :wait ,(cmd-control-foreground control)
+                          :output ,(if (cmd-control-foreground control)
+                                       :string
+                                       nil)
+                          :error-on-exit-code ,(cmd-control-error-on-exit-code control)
+                          :error-unless-exit-code
+                          ,(cmd-control-error-unless-exit-code control)
                           :split-on ,(if breaker (apply #'mkstr breaker))))))
           command-form))))
 
-(set-dispatch-macro-character #\# #\> '|#>-reader|)
+(defun reader-wrapper (&rest args)
+  (apply '|#>-reader| args))
+
+(set-dispatch-macro-character #\# #\> 'reader-wrapper)
