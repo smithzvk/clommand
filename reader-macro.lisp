@@ -18,10 +18,10 @@ readtime).  Be aware that if you do so, you are responsible for escaping
 unwanted newlines when there are line breaks in your shell code, but not the
 Lisp code \(including comma evaluated forms).  For instance:
 
- #>(shell-command \
+ #>(shell-command \\
        ,(some-lisp 
          blah
-         blech) \
+         blech) \\
      more shell stuff
      another-command)
 
