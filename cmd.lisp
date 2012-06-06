@@ -116,8 +116,7 @@
   (let ((process (%cmd (%mkdstr
                         " "
                         "cd" (directory-namestring *default-pathname-defaults*)
-                        "&&"
-                        command)
+                        "&&" command)
                        input output wait)))
     ;; Give simple output
     (cond ((not wait)
@@ -155,5 +154,57 @@
               (cmd-process-output process))
              (t output))))))
 
+(defun cmd-p (command &key true-vals false-vals
+                           (input *shell-input*)
+                           (split-on nil) (trim-whitespace t)
+                           error-on-exit-codes
+                           error-unless-exit-codes
+                           exit-code-hook)
+  "Run a shell command as a predicate"
+  (when (eql input :stream)
+    (error "Waiting for shell to exit but also providing interactive input.  ~
+            How does this make sense?"))
+  (when (and true-vals false-vals)
+    (warn "Both true-vals and false-vals were set.  True-vals takes precedence."))
+  (let ((process (%cmd (%mkdstr
+                        " "
+                        "cd" (directory-namestring *default-pathname-defaults*)
+                        "&&" command)
+                       input :string t)))
+    (when (and error-unless-exit-codes
+               (not (member (cmd-process-exit-code process)
+                            error-unless-exit-codes)))
+      (error "Command ~S exited with code ~A instead of one of ~A"
+             command
+             (cmd-process-exit-code process)
+             error-unless-exit-codes))
+    (when (and error-on-exit-codes
+               (member (cmd-process-exit-code process)
+                       error-on-exit-codes))
+      (error "Command ~S exited with code ~A which is one of ~A"
+             command
+             (cmd-process-exit-code process)
+             error-on-exit-codes))
+    (when exit-code-hook
+      (iter (for fn in (alexandria:ensure-list exit-code-hook))
+        (funcall fn (cmd-process-exit-code process))))
+    (cond (true-vals
+           (if (member (cmd-process-exit-code process) true-vals)
+               (let ((output (cmd-process-output process)))
+                 (when trim-whitespace
+                   (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
+                 (when split-on
+                   (setf output (ppcre:split split-on output)))
+                 output)
+               nil))
+          (false-vals
+           (if (not (member (cmd-process-exit-code process) false-vals))
+               (let ((output (cmd-process-output process)))
+                 (when trim-whitespace
+                   (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
+                 (when split-on
+                   (setf output (ppcre:split split-on output)))
+                 output)
+               nil)))))
 ;; (defmacro with-cmd-options ((&key (wait t) input (output :string)) &body commands)
 ;;   (
