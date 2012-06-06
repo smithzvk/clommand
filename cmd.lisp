@@ -94,9 +94,7 @@
   (with-output-to-string (out)
     (iter (for a in args)
       (princ a out))))
-(defvar *trim-whitespace* t)
 
-(defvar *split-on* nil)
 
 (defvar *shell-input* nil)
 
