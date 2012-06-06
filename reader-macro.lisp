@@ -103,7 +103,20 @@ With *remove-newlines* non-nil, the command above could look like:
           ((#\&) (setf (cmd-control-foreground control) nil))
           ((#\e #\E) (setf (cmd-control-stderr control) :error))
           ((#\w #\W) (setf (cmd-control-stderr control) :warn))
-          ((#\p) (setf (cmd-control-predicate-mode control) t)))))
+          ((#\p)
+           (let ((! (eql #\! (peek-char nil in nil))))
+             (when ! (read-char in nil))
+             (let ((arg (let ((arg
+                                (iter (while (ignore-errors
+                                              (int-char-p
+                                               (peek-char nil in nil))))
+                                  (collect (read-char in nil) result-type 'string))))
+                          (if (equal arg "")
+                              0
+                              (read-from-string arg)))))
+               (if !
+                   (setf (cmd-control-predicate-mode control) (list :false arg))
+                   (setf (cmd-control-predicate-mode control) (list :true arg)))))))))
     control))
 
 (defun |#>-reader| (stream subchar arg)
@@ -240,28 +253,51 @@ balance vertical bars.
                                 `(translate-item
                                   (let ((*shell-input* nil)) ,(cadr x)))))
                    (reverse ext))
-       ,(let ((command-form
-                `(cmd (if *remove-newlines*
-                          (apply 'mkstr
-                                 (mapcar
-                                  (lambda (x)
-                                    (if (stringp x)
-                                        (substitute #\Space #\Newline x)
-                                        x))
-                                  ,(cons 'list command)))
-                          (mkstr ,@command))
-                      :wait ,(cmd-control-foreground control)
-                      :output ,(if (cmd-control-foreground control)
-                                   :string
-                                   nil)
-                      :error-on-exit-codes
-                      ,(and (cmd-control-error-on-exit-code control)
-                            `(list ,(cmd-control-error-on-exit-code control)))
-                      :error-unless-exit-codes
-                      ,(and (cmd-control-error-unless-exit-code control)
-                            `(list ,(cmd-control-error-unless-exit-code control)))
-                      :split-on ,(if breaker (apply #'mkstr breaker)))))
-          command-form))))
+       ,(let* ((cmd-string
+                 `(if *remove-newlines*
+                      (apply 'mkstr
+                             (mapcar
+                              (lambda (x)
+                                (if (stringp x)
+                                    (substitute #\Space #\Newline x)
+                                    x))
+                              ,(cons 'list command)))
+                      (mkstr ,@command))))
+          (if (cmd-control-predicate-mode control)
+              (destructuring-bind (type arg) (cmd-control-predicate-mode control)
+                (case type
+                  (:true
+                   `(cmd-p ,cmd-string
+                           :true-vals (list ,arg)
+                           :error-on-exit-codes
+                           ,(and (cmd-control-error-on-exit-code control)
+                                 `(list ,(cmd-control-error-on-exit-code control)))
+                           :error-unless-exit-codes
+                           ,(and (cmd-control-error-unless-exit-code control)
+                                 `(list ,(cmd-control-error-unless-exit-code control)))
+                           :split-on ,(if breaker (apply #'mkstr breaker))))
+                  (:false
+                   `(cmd-p ,cmd-string
+                           :false-vals (list ,arg)
+                           :error-on-exit-codes
+                           ,(and (cmd-control-error-on-exit-code control)
+                                 `(list ,(cmd-control-error-on-exit-code control)))
+                           :error-unless-exit-codes
+                           ,(and (cmd-control-error-unless-exit-code control)
+                                 `(list ,(cmd-control-error-unless-exit-code control)))
+                           :split-on ,(if breaker (apply #'mkstr breaker))))))
+              `(cmd ,cmd-string
+                    :wait ,(cmd-control-foreground control)
+                    :output ,(if (cmd-control-foreground control)
+                                 :string
+                                 nil)
+                    :error-on-exit-codes
+                    ,(and (cmd-control-error-on-exit-code control)
+                          `(list ,(cmd-control-error-on-exit-code control)))
+                    :error-unless-exit-codes
+                    ,(and (cmd-control-error-unless-exit-code control)
+                          `(list ,(cmd-control-error-unless-exit-code control)))
+                    :split-on ,(if breaker (apply #'mkstr breaker))))))))
 
 (defun reader-wrapper (&rest args)
   (apply '|#>-reader| args))
