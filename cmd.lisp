@@ -130,17 +130,19 @@
            (when (and error-unless-exit-codes
                       (not (member (cmd-process-exit-code process)
                                    error-unless-exit-codes)))
-             (error "Command ~S exited with code ~A instead of one of ~A"
-                    command
-                    (cmd-process-exit-code process)
-                    error-unless-exit-codes))
+             (cerror "Continue as if successful"
+                     "Command ~S exited with code ~A instead of one of ~A"
+                     command
+                     (cmd-process-exit-code process)
+                     error-unless-exit-codes))
            (when (and error-on-exit-codes
                       (member (cmd-process-exit-code process)
                               error-on-exit-codes))
-             (error "Command ~S exited with code ~A which is one of ~A"
-                    command
-                    (cmd-process-exit-code process)
-                    error-on-exit-codes))
+             (cerror "Continue as if successful"
+                     "Command ~S exited with code ~A which is one of ~A"
+                     command
+                     (cmd-process-exit-code process)
+                     error-on-exit-codes))
            (when exit-code-hook
              (iter (for fn in (alexandria:ensure-list exit-code-hook))
                (funcall fn (cmd-process-exit-code process))))
@@ -178,17 +180,19 @@
     (when (and error-unless-exit-codes
                (not (member (cmd-process-exit-code process)
                             error-unless-exit-codes)))
-      (error "Command ~S exited with code ~A instead of one of ~A"
-             command
-             (cmd-process-exit-code process)
-             error-unless-exit-codes))
+      (cerror "Continue as if successful"
+              "Command ~S exited with code ~A instead of one of ~A"
+              command
+              (cmd-process-exit-code process)
+              error-unless-exit-codes))
     (when (and error-on-exit-codes
                (member (cmd-process-exit-code process)
                        error-on-exit-codes))
-      (error "Command ~S exited with code ~A which is one of ~A"
-             command
-             (cmd-process-exit-code process)
-             error-on-exit-codes))
+      (cerror "Continue as if successful"
+              "Command ~S exited with code ~A which is one of ~A"
+              command
+              (cmd-process-exit-code process)
+              error-on-exit-codes))
     (when exit-code-hook
       (iter (for fn in (alexandria:ensure-list exit-code-hook))
         (funcall fn (cmd-process-exit-code process))))
