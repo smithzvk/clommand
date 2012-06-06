@@ -113,6 +113,8 @@
   (when (and (eql input :stream) wait)
     (error "Waiting for shell to exit but also providing interactive input.  ~
             How does this make sense?"))
+  (when split-on
+    (warn "Split-on is deprecated.  Use the pprce:split function itself."))
   (let ((process (%cmd (%mkdstr
                         " "
                         "cd" (directory-namestring *default-pathname-defaults*)
@@ -164,6 +166,8 @@
   (when (eql input :stream)
     (error "Waiting for shell to exit but also providing interactive input.  ~
             How does this make sense?"))
+  (when split-on
+    (warn "Split-on is deprecated.  Use the pprce:split function itself."))
   (when (and true-vals false-vals)
     (warn "Both true-vals and false-vals were set.  True-vals takes precedence."))
   (let ((process (%cmd (%mkdstr
