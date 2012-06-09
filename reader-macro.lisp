@@ -254,15 +254,16 @@ balance vertical bars.
                                   (let ((*shell-input* nil)) ,(cadr x)))))
                    (reverse ext))
        ,(let* ((cmd-string
-                 `(if *remove-newlines*
-                      (apply 'mkstr
-                             (mapcar
-                              (lambda (x)
-                                (if (stringp x)
-                                    (substitute #\Space #\Newline x)
-                                    x))
-                              ,(cons 'list command)))
-                      (mkstr ,@command))))
+                 `(trim-enclosing-parens
+                   (if *remove-newlines*
+                       (apply 'mkstr
+                              (mapcar
+                               (lambda (x)
+                                 (if (stringp x)
+                                     (substitute #\Space #\Newline x)
+                                     x))
+                               ,(cons 'list command)))
+                       (mkstr ,@command)))))
           (if (cmd-control-predicate-mode control)
               (destructuring-bind (type arg) (cmd-control-predicate-mode control)
                 (case type
@@ -298,6 +299,9 @@ balance vertical bars.
                     ,(and (cmd-control-error-unless-exit-code control)
                           `(list ,(cmd-control-error-unless-exit-code control)))
                     :split-on ,(if breaker (apply #'mkstr breaker))))))))
+
+(defun trim-enclosing-parens (string)
+  (subseq string 1 (- (length string) 1)))
 
 (defun reader-wrapper (&rest args)
   (apply '|#>-reader| args))
