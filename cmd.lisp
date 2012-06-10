@@ -115,15 +115,25 @@
          (unless (eql ,binding-var ',binding-unbound)
            ,binding-clean-up)))))
 
-(defun cmd (command &key (input *shell-input*) (output :string) (wait t)
+(defun cmd-bg (command &key (input *shell-input*) (output :stream))
+  "Run command in the background."
+  (%cmd (%mkdstr
+         " "
+         "cd" (directory-namestring *default-pathname-defaults*)
+         "&&" command)
+        input output nil))
+
+(defun cmd (command &key (input *shell-input*) (output :string)
                          (split-on nil) (trim-whitespace t)
                          error-on-exit-codes
                          error-unless-exit-codes
                          exit-code-hook)
-  "Input streams must be closed before output streams (in SBCL)."
-  (when (and (eql input :stream) wait)
-    (error "Waiting for shell to exit but also providing interactive input.  ~
-            How does this make sense?"))
+  "Run command.
+
+Input streams must be closed before output streams (in SBCL)."
+  (when (eql input :stream)
+    (error "You cannot use input as :stream here because this CMD blocks.  ~
+            Use CMD-BG instead."))
   (when split-on
     (warn "Split-on is deprecated.  Use the pprce:split function itself."))
   (with-protected-binding
@@ -131,62 +141,46 @@
                       " "
                       "cd" (directory-namestring *default-pathname-defaults*)
                       "&&" command)
-                     input output wait)
-               (and wait
-                    (sb-ext:process-kill (cmd-process-process-obj process)
-                                         15)))
+                     input output t)
+               (sb-ext:process-kill (cmd-process-process-obj process)
+                                    15))
+    (when (and error-unless-exit-codes
+               (not (member (cmd-process-exit-code process)
+                            error-unless-exit-codes)))
+      (cerror "Continue as if successful"
+              "Command ~S exited with code ~A instead of one of ~A"
+              command
+              (cmd-process-exit-code process)
+              error-unless-exit-codes))
+    (when (member (cmd-process-exit-code process)
+                  error-on-exit-codes)
+      (cerror "Continue as if successful"
+              "Command ~S exited with code ~A which is one of ~A"
+              command
+              (cmd-process-exit-code process)
+              error-on-exit-codes))
+    (when exit-code-hook
+      (iter (for fn in (alexandria:ensure-list exit-code-hook))
+        (funcall fn (cmd-process-exit-code process))))
     ;; Give simple output
-    (cond ((not wait)
-           ;; This clause holds many of the complicated use cases.  Almost
-           ;; anytime you need to specify a stream for input or output, this is
-           ;; where you'll end up.
-           process)
-          (t
-           (when (and error-unless-exit-codes
-                      (not (member (cmd-process-exit-code process)
-                                   error-unless-exit-codes)))
-             (cerror "Continue as if successful"
-                     "Command ~S exited with code ~A instead of one of ~A"
-                     command
-                     (cmd-process-exit-code process)
-                     error-unless-exit-codes))
-           (when (and error-on-exit-codes
-                      (member (cmd-process-exit-code process)
-                              error-on-exit-codes))
-             (cerror "Continue as if successful"
-                     "Command ~S exited with code ~A which is one of ~A"
-                     command
-                     (cmd-process-exit-code process)
-                     error-on-exit-codes))
-           (when exit-code-hook
-             (iter (for fn in (alexandria:ensure-list exit-code-hook))
-               (funcall fn (cmd-process-exit-code process))))
-           (cond
-             ((eql output :string)
-              (let ((output (cmd-process-output process)))
-                (when trim-whitespace
-                  (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
-                (when split-on
-                  (setf output (ppcre:split split-on output)))
-                output))
-             ((eql output :stream)
-              (cmd-process-output process))
-             (t output))))))
+    (cond
+      ((eql output :string)
+       (let ((output (cmd-process-output process)))
+         (when trim-whitespace
+           (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
+         (when split-on
+           (setf output (ppcre:split split-on output)))
+         output))
+      ((eql output :stream)
+       (cmd-process-output process))
+      (t output))))
 
-(defun cmd-p (command &key true-vals false-vals
+(defun cmd-p (command &key (true-vals '(0)) (false-vals '(1))
                            (input *shell-input*)
-                           (split-on nil) (trim-whitespace t)
                            error-on-exit-codes
                            error-unless-exit-codes
                            exit-code-hook)
   "Run a shell command as a predicate"
-  (when (eql input :stream)
-    (error "Waiting for shell to exit but also providing interactive input.  ~
-            How does this make sense?"))
-  (when split-on
-    (warn "Split-on is deprecated.  Use the pprce:split function itself."))
-  (when (and true-vals false-vals)
-    (warn "Both true-vals and false-vals were set.  True-vals takes precedence."))
   (let ((process (%cmd (%mkdstr
                         " "
                         "cd" (directory-namestring *default-pathname-defaults*)
@@ -200,9 +194,8 @@
               command
               (cmd-process-exit-code process)
               error-unless-exit-codes))
-    (when (and error-on-exit-codes
-               (member (cmd-process-exit-code process)
-                       error-on-exit-codes))
+    (when (member (cmd-process-exit-code process)
+                  error-on-exit-codes)
       (cerror "Continue as if successful"
               "Command ~S exited with code ~A which is one of ~A"
               command
@@ -212,18 +205,14 @@
       (iter (for fn in (alexandria:ensure-list exit-code-hook))
         (funcall fn (cmd-process-exit-code process))))
     (let ((output (cmd-process-output process)))
-      (when trim-whitespace
-        (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
-      (when split-on
-        (setf output (ppcre:split split-on output)))
-      (cond (true-vals
-             (if (member (cmd-process-exit-code process) true-vals)
-                 output
-                 nil))
-            (false-vals
-             (if (not (member (cmd-process-exit-code process) false-vals))
-                 output
-                 nil))))))
+      (cond ((member (cmd-process-exit-code process) true-vals)
+             output)
+            ((member (cmd-process-exit-code process) false-vals)
+             nil)
+            (t (cerror "Return NIL"
+                       "~A exited with code ~A which is not a true value ~A ~
+                        or a false value ~A."
+                       command true-vals false-vals))))))
 
 
 ;; (defmacro with-cmd-options ((&key (wait t) input (output :string)) &body commands)

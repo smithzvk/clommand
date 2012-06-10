@@ -264,41 +264,53 @@ balance vertical bars.
                                      x))
                                ,(cons 'list command)))
                        (mkstr ,@command)))))
-          (if (cmd-control-predicate-mode control)
-              (destructuring-bind (type arg) (cmd-control-predicate-mode control)
-                (case type
-                  (:true
-                   `(cmd-p ,cmd-string
-                           :true-vals (list ,arg)
-                           :error-on-exit-codes
-                           ,(and (cmd-control-error-on-exit-code control)
-                                 `(list ,(cmd-control-error-on-exit-code control)))
-                           :error-unless-exit-codes
-                           ,(and (cmd-control-error-unless-exit-code control)
-                                 `(list ,(cmd-control-error-unless-exit-code control)))
-                           :split-on ,(if breaker (apply #'mkstr breaker))))
-                  (:false
-                   `(cmd-p ,cmd-string
-                           :false-vals (list ,arg)
-                           :error-on-exit-codes
-                           ,(and (cmd-control-error-on-exit-code control)
-                                 `(list ,(cmd-control-error-on-exit-code control)))
-                           :error-unless-exit-codes
-                           ,(and (cmd-control-error-unless-exit-code control)
-                                 `(list ,(cmd-control-error-unless-exit-code control)))
-                           :split-on ,(if breaker (apply #'mkstr breaker))))))
-              `(cmd ,cmd-string
-                    :wait ,(cmd-control-foreground control)
-                    :output ,(if (cmd-control-foreground control)
-                                 :string
-                                 nil)
-                    :error-on-exit-codes
-                    ,(and (cmd-control-error-on-exit-code control)
-                          `(list ,(cmd-control-error-on-exit-code control)))
-                    :error-unless-exit-codes
-                    ,(and (cmd-control-error-unless-exit-code control)
-                          `(list ,(cmd-control-error-unless-exit-code control)))
-                    :split-on ,(if breaker (apply #'mkstr breaker))))))))
+          (cond ((cmd-control-predicate-mode control)
+                 (destructuring-bind (type arg) (cmd-control-predicate-mode control)
+                   (case type
+                     (:true
+                      `(cmd-p ,cmd-string
+                              :true-vals (list ,arg)
+                              :error-on-exit-codes
+                              ,(and (cmd-control-error-on-exit-code control)
+                                    `(list ,(cmd-control-error-on-exit-code control)))
+                              :error-unless-exit-codes
+                              ,(and (cmd-control-error-unless-exit-code control)
+                                    `(list ,(cmd-control-error-unless-exit-code
+                                             control)))))
+                     (:false
+                      `(cmd-p ,cmd-string
+                              :false-vals (list ,arg)
+                              :error-on-exit-codes
+                              ,(and (cmd-control-error-on-exit-code control)
+                                    `(list ,(cmd-control-error-on-exit-code control)))
+                              :error-unless-exit-codes
+                              ,(and (cmd-control-error-unless-exit-code control)
+                                    `(list ,(cmd-control-error-unless-exit-code
+                                             control))))))))
+                ((cmd-control-foreground control)
+                 `(cmd ,cmd-string
+                       :output ,(if (cmd-control-foreground control)
+                                    :string
+                                    nil)
+                       :error-on-exit-codes
+                       ,(and (cmd-control-error-on-exit-code control)
+                             `(list ,(cmd-control-error-on-exit-code control)))
+                       :error-unless-exit-codes
+                       ,(and (cmd-control-error-unless-exit-code control)
+                             `(list ,(cmd-control-error-unless-exit-code control)))
+                       :split-on ,(if breaker (apply #'mkstr breaker))))
+                (t
+                 `(cmd-bg ,cmd-string
+                          :output ,(if (cmd-control-foreground control)
+                                       :string
+                                       nil)
+                          :error-on-exit-codes
+                          ,(and (cmd-control-error-on-exit-code control)
+                                `(list ,(cmd-control-error-on-exit-code control)))
+                          :error-unless-exit-codes
+                          ,(and (cmd-control-error-unless-exit-code control)
+                                `(list ,(cmd-control-error-unless-exit-code
+                                         control))))))))))
 
 (defun trim-enclosing-parens (string)
   (subseq string 1 (- (length string) 1)))

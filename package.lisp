@@ -2,5 +2,7 @@
 (defpackage :clommand
     (:nicknames :cmd)
   (:use :cl :iter :toolbox :fad)
-  (:export #:cmd) )
+  (:export #:cmd
+           #:cmd-p
+           #:cmd-bg))
 
