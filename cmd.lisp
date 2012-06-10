@@ -122,7 +122,12 @@
   "Run command in the background."
   (%cmd (%mkdstr
          " "
-         "cd" (directory-namestring *default-pathname-defaults*)
+         "cd" (if (fad:directory-exists-p
+                   (make-pathname :directory
+                                  (pathname-directory
+                                   *default-pathname-defaults*)))
+                  (directory-namestring *default-pathname-defaults*)
+                  "./")
          "&&" (wrap-in-{} command))
         input output nil))
 
@@ -142,7 +147,12 @@ Input streams must be closed before output streams (in SBCL)."
   (with-protected-binding
       (process (%cmd (%mkdstr
                       " "
-                      "cd" (directory-namestring *default-pathname-defaults*)
+                      "cd" (if (fad:directory-exists-p
+                                (make-pathname :directory
+                                               (pathname-directory
+                                                *default-pathname-defaults*)))
+                               (directory-namestring *default-pathname-defaults*)
+                               "./")
                       "&&" (wrap-in-{} command))
                      input output t)
                (sb-ext:process-kill (cmd-process-process-obj process)
@@ -186,7 +196,12 @@ Input streams must be closed before output streams (in SBCL)."
   "Run a shell command as a predicate"
   (let ((process (%cmd (%mkdstr
                         " "
-                        "cd" (directory-namestring *default-pathname-defaults*)
+                        "cd" (if (fad:directory-exists-p
+                                  (make-pathname :directory
+                                                 (pathname-directory
+                                                  *default-pathname-defaults*)))
+                                 (directory-namestring *default-pathname-defaults*)
+                                 "./")
                         "&&" (wrap-in-{} command))
                        input :string t)))
     (when (and error-unless-exit-codes
