@@ -115,12 +115,15 @@
          (unless (eql ,binding-var ',binding-unbound)
            ,binding-clean-up)))))
 
+(defun wrap-in-{} (string)
+  (concatenate 'string "{ " string "; }"))
+
 (defun cmd-bg (command &key (input *shell-input*) (output :stream))
   "Run command in the background."
   (%cmd (%mkdstr
          " "
          "cd" (directory-namestring *default-pathname-defaults*)
-         "&&" command)
+         "&&" (wrap-in-{} command))
         input output nil))
 
 (defun cmd (command &key (input *shell-input*) (output :string)
@@ -140,7 +143,7 @@ Input streams must be closed before output streams (in SBCL)."
       (process (%cmd (%mkdstr
                       " "
                       "cd" (directory-namestring *default-pathname-defaults*)
-                      "&&" command)
+                      "&&" (wrap-in-{} command))
                      input output t)
                (sb-ext:process-kill (cmd-process-process-obj process)
                                     15))
@@ -184,7 +187,7 @@ Input streams must be closed before output streams (in SBCL)."
   (let ((process (%cmd (%mkdstr
                         " "
                         "cd" (directory-namestring *default-pathname-defaults*)
-                        "&&" command)
+                        "&&" (wrap-in-{} command))
                        input :string t)))
     (when (and error-unless-exit-codes
                (not (member (cmd-process-exit-code process)
