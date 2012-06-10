@@ -17,6 +17,11 @@
                                (%cmd (car commands) input :stream nil)))
              (%pipe (cdr commands) pipe output)))))
 
+(defparameter *shell-spawn-time* .1
+  "This is the time it takes for the implementation and system to spawn a shell.
+This is a good heuristic for the polling interval.  This actually needs to be
+measured at some point.")
+
 (defun %cmd (command input output wait)
   (when (and (not wait) (typep output 'string-stream))
     (warn "SBCL doesn't handle specifying string-streams for output when you are not going to wait."))
@@ -26,20 +31,28 @@
         (%output (cond ((eql output :string)
                         (make-string-output-stream))
                        (t output))))
-    (let ((process (sb-ext:run-program "bash" (list "-c" command)
-                                       :search t
-                                       :if-input-does-not-exist :error
-                                       :input %input
-                                       :output %output
-                                       :wait (if (eql output :string)
-                                                 t
-                                                 wait))))
-      (make-cmd-process
-       :input (cond ((eql input :stream)
-                     (sb-ext:process-input process))
-                    (t %input))
-       :output (cond ((eql output :string)
-                      (get-output-stream-string %output))
-                     (t (sb-ext:process-output process)))
-       :error nil
-       :process-obj process))))
+    
+    (let* ((process (sb-ext:run-program "bash" (list "-c" command)
+                                        :search t
+                                        :if-input-does-not-exist :error
+                                        :input %input
+                                        :output %output
+                                        :wait nil))
+           (cmd-process (make-cmd-process
+                         :input (cond ((eql input :stream)
+                                       (sb-ext:process-input process))
+                                      (t %input))
+                         :output (cond ((eql output :string)
+                                        (get-output-stream-string %output))
+                                       (t (sb-ext:process-output process)))
+                         :error nil
+                         :process-obj process)))
+      (handler-case
+          (progn
+            (when wait (iter (while (sb-ext:process-alive-p process))
+                         (sleep *shell-spawn-time*)))
+            cmd-process)
+        (sb-sys:interactive-interrupt (condition)
+          (sb-ext:process-kill process sb-posix:sigstop)
+          (prog1 (cerror "Continue" condition)
+            (sb-ext:process-kill process sb-posix:sigcont)))))))

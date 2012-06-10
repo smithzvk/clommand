@@ -104,6 +104,17 @@
 (defun cmd-process-exit-code (process)
   (sb-impl::process-exit-code (cmd-process-process-obj process)))
 
+(defmacro with-protected-binding ((binding-var binding-form binding-clean-up)
+                                  &body body)
+  (let ((binding-unbound (gensym)))
+    `(let ((,binding-var ',binding-unbound))
+       (unwind-protect
+            (progn
+              (setf ,binding-var ,binding-form)
+              ,@body)
+         (unless (eql ,binding-var ',binding-unbound)
+           ,binding-clean-up)))))
+
 (defun cmd (command &key (input *shell-input*) (output :string) (wait t)
                          (split-on nil) (trim-whitespace t)
                          error-on-exit-codes
@@ -115,11 +126,15 @@
             How does this make sense?"))
   (when split-on
     (warn "Split-on is deprecated.  Use the pprce:split function itself."))
-  (let ((process (%cmd (%mkdstr
-                        " "
-                        "cd" (directory-namestring *default-pathname-defaults*)
-                        "&&" command)
-                       input output wait)))
+  (with-protected-binding
+      (process (%cmd (%mkdstr
+                      " "
+                      "cd" (directory-namestring *default-pathname-defaults*)
+                      "&&" command)
+                     input output wait)
+               (and wait
+                    (sb-ext:process-kill (cmd-process-process-obj process)
+                                         15)))
     ;; Give simple output
     (cond ((not wait)
            ;; This clause holds many of the complicated use cases.  Almost
