@@ -1,8 +1,8 @@
 
 (asdf:defsystem #:clommand
   :name "clommand"
-  :author "Zachary Smith <elzacho@gmail.com>"
-  :license "GPLv3 or later"
+  :author "Zachary Kost-Smith <zachkostsmith@gmail.com>"
+  :license "LLGPL"
   :description
   "A package for using the shell easily and uniformly from Common Lisps"
   :components ((:file "package")
