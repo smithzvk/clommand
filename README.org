@@ -1,0 +1,142 @@
+
+* CLommand
+
+CLommand is a library to make interaction with files and external programs as
+easy as it is in bash.  In order to accomplish this task, it requires three
+components:
+
+ 1. A compatibility layer to smooth over the various implementation's
+    implementations of shell interaction (each is similar, but subtly
+    different).
+ 2. A simple abstracted interface and usage heuristics.  The reason why the
+    shell is so convenient for handling jobs and file systems is because it is
+    an organically optimized DSL for these purposes.  We need Clommand to be
+    this useful and convenient.
+ 3. A shorthand for calling the shell.  Once again, calling a shell command
+    needs to be extremely simple; so simple that there is no syntactic overhead
+    to using it.
+
+We feel that Clommand has largely achieved these goals.  We departed from the
+standard method of running external programs in order to simplify the
+interface.  In addition to replacing the pseudo-standard =run-program=
+interface, a terse read macro syntax is introduced that makes calling shell
+commands nearly painless.
+
+These things are in the works:
+
+When implementing Clommand, it became apparent that the integration of Lisp with
+shell commands could lead to something greater than the just shell by itself
+coexisting with Common Lisp.  Naturally Clommand allows you to use a full
+numeric stack, extensive data structures, and multiple computational paradigms
+while writing your shell scripts.  However, Clommand allows you to tie your
+programs into the powerful Common Lisp condition system, removing the cumbersome
+error checking that is inherent with shell programming.  Further, Slime's
+powerful feature set gives you a powerful control over the running processes
+when using a multithreaded Lisp.
+
+** Usage
+
+The main functional entry point of the CLommand library is the =cmd= and
+=cmd-bg= functions.  The =cmd= function allows you to issue commands to the
+shell in the foreground.  Similarly, the =cmd-bg= function allows you to issue
+commands that are run in the background.  Of the two functions =cmd-bg= is the
+more general.
+
+Examples
+
+Another function, =cmd-p=, is defined to cover a set of common use cases in
+shell scripts.  The function =cmd-p= runs commands that act as predicates (exit
+with a certain code, usually 0, when true).
+
+Examples
+
+*** The Sharp-> interface
+
+The libraries main purpose is to provide a simple interface to the shell.  While
+the =cmd-bg= function is the most generic tool in the library, it is a bit
+cumbersome to use.  A simpler and much more terse interface is done via the
+sharp-> reader macro.
+
+The sharp-> reader macro serves as a short hand for executing shell commands and
+how they tie into the condition system.
+
+Examples
+
+Because the sharp-> reader macro makes it easy to interface shell applications
+with Common Lisp, via the parameter splicing and the shorthand to tie into the
+CL condition system, programming using CLommand is actually much more robust and
+powerful than using the shell itself.
+
+Error handling comes naturally using Clommand and, with the entire CL standard
+library and a host of third party libraries at your disposal, things that were
+difficult in the shell are now simple.
+
+Examples
+
+x : treat the exit code as an error indicator.  If the return is the defualt 0,
+assume no error, but if non-zero, report an error with any output from stderr.
+
+p : treat the return value as a predicate.  The default true value is 0 and the
+true value will be replaced by stdout if the true value is returned.  The false
+value defaults to 1, nil is returned in that case.  Any other value signals an
+error.  If there was not an error, any output on stderr is signalled as a
+warning.  If there is an error, then any output on stderr is signalled as an
+error (though continuable) as well as a final error for the return code.
+
+e : Scan any output on stderr for the word error and signal an error with that
+text.  This error is continuable and is signalled as it is encountered.
+
+w : Scan any output on stderr for the word warn and signal a warning with that
+text.  This warning is continued as it is encountered.
+
+by default we assume rew, that only leaves p as an option.  Seems simple enough.
+
+#+begin_src lisp
+#>rew(ls)
+
+#>pew(false)
+
+#>p(true)
+
+#>ew()
+#+end_src
+
+** Other notes
+
+Of utmost concern for me after using this library for a few years is that
+some kind of error handling needs to be available.  This is problematic as
+there is no agreed upon method to signal an error in shell commands.  Error
+output is little more than a stream of output that shouldn't be interpreted
+as the actual output (sometimes errors, but other times warnings or just
+extra information).  The return value is used differently on a command by
+command basis.  When using the shell, the user just needs to know how these
+outputs are being used and what they mean.  This means that in this library,
+we also need to do this.  The command function needs to have options that
+define how errors are reported and the result returned.
+
+I propose that we formally define a few different interfaces that treat the
+most common cases.  First, the is the general interface that just runs the
+command and returns the output and the return value.  In this case the user
+is completely responsible for interpreting the return values.  The stderr
+stream can be mixed into stdout, but there needs to be an option where this
+is not the case.  This will take doing on the libraries part, as not all
+Lisps offer that option.  We can just call this =cmd=.
+
+Second, we need a predicate command.  In this case, we call the command and
+then map certain return values to true or false.  The true value can be
+replaced (ala psuedopredicate) by the the stdout output or the stdout and
+stderr output, or the stderr could signal an error or just a warning.  It
+would be nice to give the user the option to specify dispatch functions that
+determine how the stream data on stderr (and possibly stdout) should be
+interpreted.  This iterface can be called =cmd-p=.
+
+The third interface is perhaps the most common interface in the Posix
+environment.  The command's return value provides the fatal error or lack
+thereof, the stderr provides warnings and extra error information, and the
+actual return is either in side effects in the file system or on stdout.
+This is different from the first in that I would very much like to provide
+some error handling for these programs.  This interface can be called
+
+** Installation
+
+Install as you would any ASDF library.
