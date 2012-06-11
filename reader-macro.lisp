@@ -247,6 +247,8 @@ balance vertical bars.
               (while (> paren-level 0))
               (finally
                (when (eql #\/ (peek-char nil stream nil nil t))
+                 (warn "This syntax to split the output is deprecated.  ~
+                        Use the pprce:split function itself.")
                  (read-char stream t nil t)
                  (push (read stream t nil t) breaker)))))))
     `(let ,(mapcar (/. (x) (list (car x)
