@@ -35,6 +35,7 @@ measured at some point.")
                                         :if-input-does-not-exist :error
                                         :input %input
                                         :output %output
+                                        :error :stream
                                         :wait nil)))
       (handler-case
           (progn
@@ -52,7 +53,12 @@ measured at some point.")
                                  using #'read-line)
                                (format out "~A~%" line))))
                            (t (sb-ext:process-output process)))
-             :error nil
+             :error (with-output-to-string (out)
+                      (iter
+                        (for line in-stream
+                          (sb-ext:process-error process)
+                          using #'read-line)
+                        (format out "~A~%" line)))
              :process-obj process))
         (sb-sys:interactive-interrupt (condition)
           (sb-ext:process-kill process sb-posix:sigstop)

@@ -165,17 +165,19 @@ Input streams must be closed before output streams (in SBCL)."
                (not (member (cmd-process-exit-code process)
                             error-unless-exit-codes)))
       (cerror "Continue as if successful"
-              "Command ~S exited with code ~A instead of one of ~A"
+              "Command ~S exited with code ~A instead of one of ~A:~%~%  ~A"
               command
               (cmd-process-exit-code process)
-              error-unless-exit-codes))
+              error-unless-exit-codes
+              (cmd-process-error process)))
     (when (member (cmd-process-exit-code process)
                   error-on-exit-codes)
       (cerror "Continue as if successful"
-              "Command ~S exited with code ~A which is one of ~A"
+              "Command ~S exited with code ~A which is one of ~A:~%~%  ~A"
               command
               (cmd-process-exit-code process)
-              error-on-exit-codes))
+              error-on-exit-codes
+              (cmd-process-error process)))
     (when exit-code-hook
       (iter (for fn in (alexandria:ensure-list exit-code-hook))
         (funcall fn (cmd-process-exit-code process))))
@@ -214,17 +216,19 @@ Input streams must be closed before output streams (in SBCL)."
                (not (member (cmd-process-exit-code process)
                             error-unless-exit-codes)))
       (cerror "Continue as if successful"
-              "Command ~S exited with code ~A instead of one of ~A"
+              "Command ~S exited with code ~A instead of one of ~A:~%~%  ~A"
               command
               (cmd-process-exit-code process)
-              error-unless-exit-codes))
+              error-unless-exit-codes
+              (cmd-process-error process)))
     (when (member (cmd-process-exit-code process)
                   error-on-exit-codes)
       (cerror "Continue as if successful"
-              "Command ~S exited with code ~A which is one of ~A"
+              "Command ~S exited with code ~A which is one of ~A:~%~%  ~A"
               command
               (cmd-process-exit-code process)
-              error-on-exit-codes))
+              error-on-exit-codes
+              (cmd-process-error process)))
     (when exit-code-hook
       (iter (for fn in (alexandria:ensure-list exit-code-hook))
         (funcall fn (cmd-process-exit-code process))))
@@ -234,9 +238,11 @@ Input streams must be closed before output streams (in SBCL)."
             ((member (cmd-process-exit-code process) false-vals)
              nil)
             (t (cerror "Return NIL"
-                       "~A exited with code ~A which is not a true value ~A ~
-                        or a false value ~A."
-                       command true-vals false-vals))))))
+                       "~A exited with code ~A which is not a true ~
+                        value ~A or a false value ~A:~%~%  ~A"
+                       command (cmd-process-exit-code process)
+                       true-vals false-vals
+                       (cmd-process-error process)))))))
 
 
 ;; (defmacro with-cmd-options ((&key (wait t) input (output :string)) &body commands)
