@@ -53,47 +53,6 @@
 ;;   (with-open-stream 
 ;;       (%cmd command :output 
 
-;; Some string utilities
-
-(defun ~/ (&rest args)
-  (concatenate
-   'string
-   "$HOME/" (apply #'./ (rest args))))
-
-(defun /./ (&rest args)
-  (concatenate
-   'string
-   "/" (apply #'./ (rest args))))
-
-(defgeneric stringify (obj)
-  (:method (obj)
-    (with-output-to-string (out)
-      (princ obj out))))
-
-(defun ./ (&rest args)
-  (if (null (rest args))
-      (first args)
-      (concatenate
-       'string
-       (first args)
-       "/"
-       (apply #'./ (rest args)))))
-
-(defvar _ " ")
-
-(defun %mkdstr (delim &rest args)
-  "Make delimited string"
-  (with-output-to-string (out)
-    (iter (for a in args)
-      (unless (first-iteration-p)
-        (princ (stringify delim) out))
-      (princ a out))))
-
-(defun %mkstr (&rest args)
-  "Make string"
-  (with-output-to-string (out)
-    (iter (for a in args)
-      (princ a out))))
 
 
 (defvar *shell-input* nil)
@@ -123,8 +82,6 @@ error if finalizers are not supported)."
               (progn ,@body)
            ,@binding-clean-up))))
 
-(defun wrap-in-{} (string)
-  (concatenate 'string "{ " string "; }"))
 
 (defun cmd-bg (command &key (input *shell-input*) (output :stream))
   "Run command in the background."
@@ -252,6 +209,32 @@ Input streams must be closed before output streams (in SBCL)."
                        true-vals false-vals
                        (cmd-process-error process)))))))
 
+;; If wait is specified non-nil, then it will not exit until the command has
+;; completed.
+
+;; If wait is specified nil or not specified, then command will still wait
+;; unless the output is specified to be a stream or nil and the input is
+;; specified to be a stream, a string, or nil and the error output is either
+;; :output or nil.
+
+;; The return value is the output.  That output is either string, a stream, or
+;; or a list of two of these objects (standard and error output) if you
+;; requested them separate, or nil.  The second return value is the 
+
+(defun scan-for-warn (line)
+  (when (ppcre:scan (ppcre:create-scanner "warn" :case-insensitive-mode t) line)
+    (warn line)))
+
+(defun scan-for-error (line)
+  (when (ppcre:scan (ppcre:create-scanner "error" :case-insensitive-mode t) line)
+    (warn line)))
+
+;; (defvar *stderr-hook* '(scan-for-warn scan-for-error))
+
+;; (defvar *stdout-hook* nil)
+
+;; It is often necessary to wrap more complicated commands in Lisp functions of
+;; their own.
 
 ;; (defmacro with-cmd-options ((&key (wait t) input (output :string)) &body commands)
 ;;   (
