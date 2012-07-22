@@ -17,4 +17,5 @@
                (:file "cmd")
                (:file "reader-macro"))
   :serial t
-  :depends-on (:toolbox :iterate :cl-fad :cl-ppcre :cl-plumbing :trivial-garbage))
+  :depends-on (:toolbox :iterate :cl-fad :cl-ppcre
+               :cl-plumbing :protected-bindings))

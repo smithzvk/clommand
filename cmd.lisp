@@ -63,24 +63,6 @@
 (defun cmd-process-exit-code (process)
   (sb-impl::process-exit-code (cmd-process-process-obj process)))
 
-(defmacro with-protected-binding ((binding-var binding-form &rest binding-clean-up)
-                                  &body body)
-  "This sets up a protected binding, a binding that has some clean-up code that
-will always be run when the binding expires.
-
-Usually, the forms specified at the end of the form binding will be placed in
-the clean-up clause of an unwind-protect.  If the clean-up forms starts with
-keyword finalize, then the following code will be exectuted as if in a progn and
-the result will be set as a finalization thunk for the object (or produce an
-error if finalizers are not supported)."
-  (if (equal (first binding-clean-up) :finalize)
-      `(let ((,binding-var ,binding-form))
-         (tg:finalize ,binding-var (progn ,@(rest binding-clean-up)))
-         ,@body)
-      `(let ((,binding-var ,binding-form))
-         (unwind-protect
-              (progn ,@body)
-           ,@binding-clean-up))))
 
 
 (defun cmd-bg (command &key (input *shell-input*) (output :stream))
