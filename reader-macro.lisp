@@ -75,7 +75,8 @@ With *remove-newlines* non-nil, the command above could look like:
   (foreground t)
   (stderr-in-stdout t)
   (stderr :warn)
-  error-unless-exit-code error-on-exit-code)
+  error-unless-exit-code error-on-exit-code
+  breaker)
 
 (defun int-char-p (char)
   (or (digit-char-p char)
@@ -103,6 +104,10 @@ With *remove-newlines* non-nil, the command above could look like:
           ((#\&) (setf (cmd-control-foreground control) nil))
           ((#\e #\E) (setf (cmd-control-stderr control) :error))
           ((#\w #\W) (setf (cmd-control-stderr control) :warn))
+          (#\/ (setf (cmd-control-breaker control)
+                     (case (peek-char nil in nil)
+                       ((#\# #\") (read in))
+                       (otherwise #\Newline))))
           ((#\p)
            (let ((! (eql #\! (peek-char nil in nil))))
              (when ! (read-char in nil))
@@ -121,35 +126,62 @@ With *remove-newlines* non-nil, the command above could look like:
 
 (defun |#>-reader| (stream subchar arg)
   """
-The `#>' reader allows shell commands to be executed from Common Lisp programs.
-Use shell commands as if they are normal Lisp functions (except see below as
-how parameters are inserted into your shell commands).
+The '#>' reader allows shell commands to be executed from Common Lisp programs.
+Use shell commands as if they are normal Lisp functions \(except see below as
+how parameters are inserted into your shell commands) and return the result in a
+string.
 
-Read a `form' that will be sent to a shell for execution.  We will read in
-characters and pass them directly to the shell except when we find a #\,.
-Commas are treated as insertion points for Lisp expressions.  Put any form in
-immediately after it and it's result will be placed there.  If you use ",@" the
-result (which should be a list) will be spliced in using spaces as a delimiter.
-Using ",d@" where `d' is any delimiting character, the result will be spliced in
-delimited by that character.
+After the '>' character an optional control string can be specified to affect
+how the command wil be executed.  After that control string, we will read a
+single balanced set of parentheses \(and whatever is contained), and this will
+be executed in a fresh bash shell.
+
+The Control String:
+
+  The control string can contain any of the control characters: 'x', 'e', 'w',
+  '&', '/', or 'p' many with optional arguments.
+
+  x : Interpret a non-zero exit code as an error.  If followed by an integer,
+      then that value is interpreted as the error free exit code.  If 'x' is
+      directly followed by a '!' (preceeding the integer, if it is given), then
+      anything but that number is an error.
+
+  e : Interpret any output on standard error as an error instead of mixing it
+      into standard output.
+
+  w : Like 'e' except raise a warning instead of an error.
+
+  & : Run the command in the background.  This will return a cmd-process
+      structure.
+
+  / : Instructs the commands output to be passed through a cl-ppcre:split
+      function.  You can specify the regex to split on after the '/', it
+      defaults to a newline.
+
+  p : Instructs the command to run in predicate mode executing cmd-p.  This
+      causes us to ignore some of the other control characters such as 'x' and
+      '&'.
+
+Command Substitution:
+
+We read a form that will be sent to a shell for execution \(without the
+parenteses, but wrapped in braces).  Characters are directly passed to the shell
+except when a #\, is found.  Commas are treated as insertion points for Lisp
+expressions.  Put any form in immediately after it and it's result will be
+placed there.  If you use ',@' the result (which should be a list) will be
+spliced in using spaces as a delimiter.  Using ',d@' where 'd' is any delimiting
+character, the result will be spliced in delimited by that character.
 
 This was used because it resembles quasiquote syntax and because commas are not
 usually used in the shell.  If commas are needed, you can always escape them
-with a `\' and the same is true of the few cases where `@' is used in an place
+with a '\' and the same is true of the few cases where '@' is used in a place
 where it will confuse this reader.
 
 Escaping characters are generally passed unchanged to the shell, so there is no
-need to multiply escape character.  I.E. you don't need to specify escaped
+need to multiply escape characters.  I.E. you don't need to specify escaped
 quotes as \\\".  The one exception of this rule is on commas, since they are
 really the only syntactic element here, the preceeding backslash will be removed
 allowing you to pass unescaped commas to the shell.
-
-Finally, if immediately after the closing parentheses, you place /form, the
-output of the command will be sent through a PPCRE:SPLIT command.  Think of this
-as fiddling with IFS.  Basically, the shell tokenizes input based on whatever is
-in IFS.  This allows you to do the same.  Command/#\Newline splits into lines,
-command/"\\s+" splits on any whitespace, command/"\\n\\s*\\n+" breaks whenever
-one or more blank lines are detected.
 
 Note: Piping in your shell code confuses SLIME's approximation of the Common
 Lisp's reader.  I am considering including an alternate syntax that will involve
@@ -247,8 +279,8 @@ balance vertical bars.
               (while (> paren-level 0))
               (finally
                (when (eql #\/ (peek-char nil stream nil nil t))
-                 (warn "This syntax to split the output is deprecated.  ~
-                        Use the pprce:split function itself.")
+                 (warn "This syntax to split the output is deprecated.  Use a ~@
+                        '/' before the form or the pprce:split function itself.")
                  (read-char stream t nil t)
                  (push (read stream t nil t) breaker)))))))
     `(let ,(mapcar (/. (x) (list (car x)
@@ -300,7 +332,10 @@ balance vertical bars.
                        :error-unless-exit-codes
                        ,(and (cmd-control-error-unless-exit-code control)
                              `(list ,(cmd-control-error-unless-exit-code control)))
-                       :split-on ,(if breaker (apply #'mkstr breaker))))
+                       :split-on ,(if breaker (apply #'mkstr breaker)
+                                      (if (cmd-control-breaker control)
+                                          (mkstr
+                                           (cmd-control-breaker control))))))
                 (t
                  `(cmd-bg ,cmd-string
                           :output ,(if (cmd-control-foreground control)
