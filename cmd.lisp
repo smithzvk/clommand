@@ -57,11 +57,7 @@
 
 (defvar *shell-input* nil)
 
-(defstruct cmd-process
-  input output error process-obj)
 
-(defun cmd-process-exit-code (process)
-  (sb-impl::process-exit-code (cmd-process-process-obj process)))
 
 
 
