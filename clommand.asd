@@ -7,7 +7,6 @@
   "A package for using the shell easily and uniformly from Common Lisps"
   :components ((:file "package")
                (:file "string-helpers")
-               (:file "cmd-process-structure")
                (:file
                 #+sbcl "cmd-sbcl"
                 #+cmu "cmd-cmucl"
@@ -18,5 +17,5 @@
                (:file "cmd")
                (:file "reader-macro"))
   :serial t
-  :depends-on (:toolbox :iterate :cl-fad :cl-ppcre
-               :cl-plumbing :protected-bindings))
+  :depends-on (:iterate :cl-fad :cl-ppcre :cl-plumbing
+                :protected-bindings :pythonic-string-reader))

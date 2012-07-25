@@ -2,6 +2,39 @@
 
 ;; (import '(sb-ext:process-output sb-ext:process-input))
 
+;;<<>>=
+(defstruct cmd-process
+  input output error process-obj)
+
+;;<<>>=
+(defun cmd-process-status (process)
+  (let ((status (if (cmd-process-p (cmd-process-process-obj process))
+                    ;; Sometimes they are nested
+                    (sb-ext:process-status
+                     (cmd-process-process-obj
+                      (cmd-process-process-obj process)))
+                    (sb-ext:process-status
+                     (cmd-process-process-obj process)))))
+    (case status
+      ((:stopped :running) status)
+      (otherwise
+       (sb-ext:process-exit-code
+        (cmd-process-process-obj process))))))
+
+(defun cmd-process-exit-code (process)
+  ;; ;; This is an alternate implementation that sometimes works even if your
+  ;; ;; are using signals.
+  ;; (nth-value 1 (sb-posix:waitpid
+  ;;               (sb-ext:process-pid
+  ;;                (cmd-process-process-obj process)) 0))
+
+  ;; This should work, but it doesn't if you are sending signals to your
+  ;; processes
+  (sb-ext:process-wait (cmd-process-process-obj process))
+  (sb-ext:process-exit-code (cmd-process-process-obj process)))
+
+;; Low level interface
+
 (defun %pipe (commands input output)
   (cond ((null commands)
          (with-open-stream (echo (make-echo-stream input output))
@@ -22,12 +55,19 @@
 This is a good heuristic for the polling interval.  This actually needs to be
 measured at some point.")
 
-(defun %cmd (command input output wait)
+;; @The function <<%cmd>> creates a background process and returns a cmd-process
+;; structure.  This structure must have the requested stream slots filled in.
+
+(defun %cmd (command input output error)
   (let ((%input (cond ((typep input 'string)
                        (make-string-input-stream input))
                       (t input)))
         (%output (cond ((eql output :string) :stream)
-                       (t output))))
+                       (t output)))
+        (%error (cond ((eql error :string) :stream)
+                      ((eql error :error) :stream)
+                      ((eql error :warn) :stream)
+                      (t error))))
     ;; SBCL doesn't handle specifying string-streams for output when you are not
     ;; going to wait.  This seems like a bug, but for now we limp along.
     (let* ((process (sb-ext:run-program "bash" (list "-c" command)
@@ -35,32 +75,42 @@ measured at some point.")
                                         :if-input-does-not-exist :error
                                         :input %input
                                         :output %output
-                                        :error :stream
+                                        :error %error
                                         :wait nil)))
-      (handler-case
-          (progn
-            (when wait (iter (while (sb-ext:process-alive-p process))
-                         (sleep *shell-spawn-time*)))
-            (make-cmd-process
-             :input (cond ((eql input :stream)
-                           (sb-ext:process-input process))
-                          (t %input))
-             :output (cond ((eql output :string)
-                            (with-output-to-string (out)
-                              (iter
-                               (for line in-stream
-                                 (sb-ext:process-output process)
-                                 using #'read-line)
-                               (format out "~A~%" line))))
-                           (t (sb-ext:process-output process)))
-             :error (with-output-to-string (out)
-                      (iter
-                        (for line in-stream
-                          (sb-ext:process-error process)
-                          using #'read-line)
-                        (format out "~A~%" line)))
-             :process-obj process))
-        (sb-sys:interactive-interrupt (condition)
-          (sb-ext:process-kill process sb-posix:sigstop)
-          (prog1 (cerror "Continue" condition)
-            (sb-ext:process-kill process sb-posix:sigcont)))))))
+      (make-cmd-process
+       :input (sb-ext:process-input process)
+       :output (sb-ext:process-output process)
+       :error (sb-ext:process-error process)
+       :process-obj process))))
+
+
+
+;; (sb-sys:interactive-interrupt (condition)
+;;           (sb-ext:process-kill process sb-posix:sigstop)
+;;           (prog1 (cerror "Continue" condition)
+;;             (sb-ext:process-kill process sb-posix:sigcont)))
+
+;; (defun %cmd2 (command input output error-in-output wait)
+;;   (when (and (not wait) (typep output 'string-stream))
+;;     (warn "SBCL doesn't handle specifying string-streams for output when you are not going to wait."))
+;;   (let ((%input (cond ((typep input 'string)
+;;                        (make-string-input-stream input))
+;;                       (t input)))
+;;         (%output (cond ((eql output :string)
+;;                         (make-string-output-stream))
+;;                        (t output))))
+;;     (let ((process (sb-ext:run-program "bash" (list "-c" command)
+;;                                        :search t
+;;                                        :if-input-does-not-exist :error
+;;                                        :input %input
+;;                                        :output %output
+;;                                        :wait (if (eql output :string)
+;;                                                  t
+;;                                                  wait))))
+;;       (make-cmd-process
+;;        :input (cond ((eql input :stream)
+;;                      (sb-ext:process-input process))
+;;                     (t %input))
+;;        :output (cond ((eql output :string)
+;;                       (get-output-stream-string %output))
+;;                      (t (sb-ext:process-output process)))))))

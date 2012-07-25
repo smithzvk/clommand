@@ -53,139 +53,263 @@
 ;;   (with-open-stream 
 ;;       (%cmd command :output 
 
-
+;; These variables should not be part of the user interface.  It breaks
+;; referential transparency for binding these to grossly change the behavior of
+;; the library, but that is what it does.  These need to be set on a per
+;; function call basis, so these should be keyword options to cmd and have a
+;; special syntax for the reader.
 
 (defvar *shell-input* nil)
 
+(defvar *jobs* nil
+  "Holds the process structures of all background jobs.")
 
+(defparameter *jobs-lock* (bt:make-lock "bg-jobs"))
 
+;; (when (streamp (cmd-process-input process))
+;;   (close (cmd-process-input process)))
+;; (when (streamp (cmd-process-output process))
+;;   (close (cmd-process-output process)))
+;; (when (streamp (cmd-process-error process))
+;;   (close (cmd-process-error process)))
 
+(defun remove-completed-jobs ()
+  (setf *jobs*
+        (remove-if-not
+         (lambda (x) (member (cmd-process-status x) '(:running :stopped)))
+         *jobs*)))
 
-(defun cmd-bg (command &key (input *shell-input*) (output :stream))
-  "Run command in the background."
-  (%cmd (%mkdstr
-         " "
-         "cd" (if (fad:directory-exists-p
-                   (make-pathname :directory
-                                  (pathname-directory
-                                   *default-pathname-defaults*)))
-                  (directory-namestring *default-pathname-defaults*)
-                  "./")
-         "&&" (wrap-in-{} (if (consp command)
-                              (apply '%mkdstr " " command)
-                              command)))
-        input output nil))
+(defun all-jobs ()
+  (bt:with-lock-held (*jobs-lock*)
+    (remove-completed-jobs)
+    (copy-list *jobs*)))
 
-(defun cmd (command &key (input *shell-input*) (output :string)
+(defun handle-error-output (on-error-output
+                            line
+                            error-collector
+                            error-cache)
+  (case on-error-output
+    (:warn (warn "~A" line))
+    (:error (cerror "Continue" "~A" line))
+    (otherwise
+     (cond ((listp on-error-output)
+            (mapcar (lambda (x) (funcall x line)) on-error-output))
+           (t (error
+               "I don't know how to deal with ~A for option on-error-output"
+               on-error-output)))))
+  (format error-cache "~A~%" line)
+  (format error-collector "~A~%" line))
+
+(defun handle-exit-code (command error-cache exit-code
+                         error-unless-exit-codes error-on-exit-codes exit-code-hook)
+  (cond ((and error-unless-exit-codes
+              (not (member exit-code
+                           error-unless-exit-codes)))
+         (cerror "Continue as if successful"
+                 "Command ~S exited with code ~A instead of one of ~A:~%~%  ~A"
+                 command
+                 exit-code
+                 error-unless-exit-codes
+                 error-cache))
+        ((member exit-code
+                 error-on-exit-codes)
+         (cerror "Continue as if successful"
+                 "Command ~S exited with code ~A which is one of ~A:~%~%  ~A"
+                 command
+                 exit-code
+                 error-on-exit-codes
+                 error-cache)))
+  (when exit-code-hook
+    (iter (for fn in (alexandria:ensure-list exit-code-hook))
+      (funcall fn exit-code error-cache))))
+
+(defun process-output-string (output trim-whitespace split-on)
+  (let* ((output (if trim-whitespace
+                     (string-right-trim '(#\Newline) output)
+                     output)))
+    (if split-on
+        (ppcre:split split-on output)
+        output)))
+
+(defun cmd (command &key (input *shell-input*)
+                         (output t)
+                         (error t)
+                         (on-error-output nil)
                          (split-on nil) (trim-whitespace t)
                          error-on-exit-codes
                          error-unless-exit-codes
                          exit-code-hook)
-  "Run command.
+  "Run command."
+  (let ((process
+          (%cmd (%mkdstr
+                 " "
+                 "cd" (if (fad:directory-exists-p
+                           (make-pathname :directory
+                                          (pathname-directory
+                                           *default-pathname-defaults*)))
+                          (directory-namestring *default-pathname-defaults*)
+                          "./")
+                 "&&" (wrap-in-{} (if (consp command)
+                                      (apply '%mkdstr " " command)
+                                      command)))
+                input :stream :stream)))
+    (unwind-protect
+         (let ((output-collector (make-string-output-stream))
+               (error-collector (make-string-output-stream))
+               (error-str (cmd-process-error process))
+               (output-str (cmd-process-output process)))
+           (bt:with-lock-held (*jobs-lock*)
+             (remove-completed-jobs)
+             (push process *jobs*))
+           (let ((output-collector (if (eql output :error)
+                                       error-collector
+                                       output-collector))
+                 (error-collector (if (eql error :output)
+                                      output-collector
+                                      error-collector))
+                 (output-pipe (cl-plumbing:make-two-way-pipe))
+                 (error-pipe (cl-plumbing:make-two-way-pipe))
+                 (error-cache (make-string-output-stream)))
+             (iter
+               (for out-char = (read-char-no-hang output-str nil :eof nil))
+               (when out-char
+                 (format output-pipe "~A" out-char))
+               (when (eql #\Newline out-char)
+                 (format output-collector
+                         "~A" (cl-plumbing:get-pipe-outlet-string output-pipe)))
+               (for err-char = (read-char-no-hang error-str nil :eof nil))
+               (when err-char
+                 (format error-pipe "~A" err-char))
+               (when (eql #\Newline err-char)
+                 (let ((line (cl-plumbing:get-pipe-outlet-string error-pipe)))
+                   (handle-error-output on-error-output line error-collector
+                                        error-cache)))
+               (unless (or out-char err-char)
+                 (sleep *shell-spawn-time*))
+               (until (and (eql :eof out-char) (eql :eof err-char))))
+             (handle-exit-code command
+                               (get-output-stream-string error-cache)
+                               (cmd-process-exit-code process)
+                               error-unless-exit-codes
+                               error-on-exit-codes exit-code-hook))
+           (values
+            (if output
+                (process-output-string (get-output-stream-string output-collector)
+                                       trim-whitespace split-on)
+                "")
+            (if error
+                (process-output-string (get-output-stream-string error-collector)
+                                       trim-whitespace split-on)
+                "")
+            (cmd-process-exit-code process)))
+      (when (sb-ext:process-alive-p (cmd-process-process-obj process))
+        (sb-ext:process-kill (cmd-process-process-obj process) sb-posix:sigkill))
+      (when (streamp (cmd-process-output process))
+        (close (cmd-process-output process)))
+      (when (streamp (cmd-process-error process))
+        (close (cmd-process-error process))))))
 
-Input streams must be closed before output streams (in SBCL)."
-  (when (eql input :stream)
-    (error "You cannot use input as :stream here because this CMD blocks.  ~
-            Use CMD-BG instead."))
-  (when split-on
-    (warn "Split-on is deprecated.  Use the pprce:split function itself."))
-  (with-protected-binding
-      (process (%cmd (%mkdstr
-                      " "
-                      "cd" (if (fad:directory-exists-p
-                                (make-pathname :directory
-                                               (pathname-directory
-                                                *default-pathname-defaults*)))
-                               (directory-namestring *default-pathname-defaults*)
-                               "./")
-                      "&&" (wrap-in-{} (if (consp command)
-                                           (apply '%mkdstr " " command)
-                                           command)))
-                     input output t)
-               (sb-ext:process-kill (cmd-process-process-obj process)
-                                    15))
-    (when (and error-unless-exit-codes
-               (not (member (cmd-process-exit-code process)
-                            error-unless-exit-codes)))
-      (cerror "Continue as if successful"
-              "Command ~S exited with code ~A instead of one of ~A:~%~%  ~A"
-              command
-              (cmd-process-exit-code process)
-              error-unless-exit-codes
-              (cmd-process-error process)))
-    (when (member (cmd-process-exit-code process)
-                  error-on-exit-codes)
-      (cerror "Continue as if successful"
-              "Command ~S exited with code ~A which is one of ~A:~%~%  ~A"
-              command
-              (cmd-process-exit-code process)
-              error-on-exit-codes
-              (cmd-process-error process)))
-    (when exit-code-hook
-      (iter (for fn in (alexandria:ensure-list exit-code-hook))
-        (funcall fn (cmd-process-exit-code process))))
-    ;; Give simple output
-    (cond
-      ((eql output :string)
-       (let ((output (cmd-process-output process)))
-         (when trim-whitespace
-           (setf output (string-trim '(#\Space #\Newline #\Tab) output)))
-         (when split-on
-           (setf output (ppcre:split split-on output)))
-         output))
-      ((eql output :stream)
-       (cmd-process-output process))
-      (t output))))
+(defun cmd-bg (command &key (input *shell-input*)
+                            (output t)
+                            (error t)
+                            (on-error-output nil)
+                            error-on-exit-codes
+                            error-unless-exit-codes
+                            exit-code-hook)
+  "Run command."
+  (let ((process
+          (%cmd (%mkdstr
+                 " "
+                 "cd" (if (fad:directory-exists-p
+                           (make-pathname :directory
+                                          (pathname-directory
+                                           *default-pathname-defaults*)))
+                          (directory-namestring *default-pathname-defaults*)
+                          "./")
+                 "&&" (wrap-in-{} (if (consp command)
+                                      (apply '%mkdstr " " command)
+                                      command)))
+                input :stream :stream)))
+    (let ((output-collector (cl-plumbing:make-two-way-pipe))
+          (error-collector (cl-plumbing:make-two-way-pipe))
+          (error-str (cmd-process-error process))
+          (output-str (cmd-process-output process)))
+      (bt:with-lock-held (*jobs-lock*)
+        (remove-completed-jobs)
+        (push process *jobs*))
+      (let ((thread
+              (bt:make-thread
+               (lambda ()
+                 (unwind-protect
+                      (let ((output-collector (if (eql output :error)
+                                                  error-collector
+                                                  output-collector))
+                            (error-collector (if (eql error :output)
+                                                 output-collector
+                                                 error-collector))
+                            (error-cache (make-string-output-stream))
+                            (output-pipe (cl-plumbing:make-two-way-pipe))
+                            (error-pipe (cl-plumbing:make-two-way-pipe)))
+                        (iter
+                          (for out-char = (read-char-no-hang output-str nil :eof nil))
+                          (when out-char
+                            (format output-pipe "~A" out-char))
+                          (when (eql #\Newline out-char)
+                            (format output-collector
+                                    "~A" (cl-plumbing:get-pipe-outlet-string output-pipe)))
+                          (for err-char = (read-char-no-hang error-str nil :eof nil))
+                          (when err-char
+                            (format error-pipe "~A" err-char))
+                          (when (eql #\Newline err-char)
+                            (let ((line (cl-plumbing:get-pipe-outlet-string error-pipe)))
+                              (handle-error-output on-error-output line error-collector
+                                                   error-cache)))
+                          (unless (or out-char err-char)
+                            (sleep *shell-spawn-time*))
+                          (until (and (eql :eof out-char) (eql :eof err-char))))
+                        (handle-exit-code command
+                               (get-output-stream-string error-cache)
+                               (cmd-process-exit-code process)
+                               error-unless-exit-codes
+                               error-on-exit-codes exit-code-hook))
+                   (when (sb-ext:process-alive-p (cmd-process-process-obj process))
+                     (sb-ext:process-kill
+                      (cmd-process-process-obj process) sb-posix:sigkill))
+                   (when (streamp (cmd-process-output process))
+                     (close (cmd-process-output process)))
+                   (when (streamp (cmd-process-error process))
+                     (close (cmd-process-error process))))))))
+        (values
+         (make-cmd-process
+          :input input
+          :output output-collector
+          :error error-collector
+          :process-obj process)
+         thread)))))
 
 (defun cmd-p (command &key (true-vals '(0)) (false-vals '(1))
                            (input *shell-input*)
+                           on-error-output
                            error-on-exit-codes
                            error-unless-exit-codes
                            exit-code-hook)
   "Run a shell command as a predicate"
-  (let ((process (%cmd (%mkdstr
-                        " "
-                        "cd" (if (fad:directory-exists-p
-                                  (make-pathname :directory
-                                                 (pathname-directory
-                                                  *default-pathname-defaults*)))
-                                 (directory-namestring *default-pathname-defaults*)
-                                 "./")
-                        "&&" (wrap-in-{} (if (consp command)
-                                             (apply '%mkdstr " " command)
-                                             command)))
-                       input :string t)))
-    (when (and error-unless-exit-codes
-               (not (member (cmd-process-exit-code process)
-                            error-unless-exit-codes)))
-      (cerror "Continue as if successful"
-              "Command ~S exited with code ~A instead of one of ~A:~%~%  ~A"
-              command
-              (cmd-process-exit-code process)
-              error-unless-exit-codes
-              (cmd-process-error process)))
-    (when (member (cmd-process-exit-code process)
-                  error-on-exit-codes)
-      (cerror "Continue as if successful"
-              "Command ~S exited with code ~A which is one of ~A:~%~%  ~A"
-              command
-              (cmd-process-exit-code process)
-              error-on-exit-codes
-              (cmd-process-error process)))
-    (when exit-code-hook
-      (iter (for fn in (alexandria:ensure-list exit-code-hook))
-        (funcall fn (cmd-process-exit-code process))))
-    (let ((output (cmd-process-output process)))
-      (cond ((member (cmd-process-exit-code process) true-vals)
-             output)
-            ((member (cmd-process-exit-code process) false-vals)
-             nil)
-            (t (cerror "Return NIL"
-                       "~A exited with code ~A which is not a true ~
-                        value ~A or a false value ~A:~%~%  ~A"
-                       command (cmd-process-exit-code process)
-                       true-vals false-vals
-                       (cmd-process-error process)))))))
+  (multiple-value-bind (output error-output exit-code)
+          (cmd command :input input
+                       :output t
+                       :error t
+                       :on-error-output on-error-output
+                       :error-on-exit-codes error-on-exit-codes
+                       :error-unless-exit-codes error-unless-exit-codes
+                       :exit-code-hook exit-code-hook)
+    (cond ((member exit-code true-vals) output)
+          ((member exit-code false-vals) nil)
+          (t (cerror "Return NIL"
+                     "~A exited with code ~A which is not a true ~@
+                      value ~A or a false value ~A:~%~%  ~A"
+                     command exit-code
+                     true-vals false-vals
+                     error-output)))))
 
 ;; If wait is specified non-nil, then it will not exit until the command has
 ;; completed.

@@ -25,15 +25,89 @@
   (let ((*default-pathname-defaults*
           (asdf:component-pathname
            (asdf:find-system :clommand-test))))
+    ;; Controlling string output
+    (is (equal '("test" "" 0)
+               (multiple-value-list (cmd "echo test"))))
+    (is (equal '("" "" 0)
+               (multiple-value-list (cmd "echo test" :output nil))))
+    (is (equal '("" "test" 0)
+               (multiple-value-list (cmd "echo test" :output :error))))
+    (is (equal '("" "" 0)
+               (multiple-value-list (cmd "echo test" :output :error :error nil))))
+    (is (equal '("" "bash: this-does-not-exist: command not found" 127)
+               (multiple-value-list (cmd "this-does-not-exist"))))
+    (is (equal '("bash: this-does-not-exist: command not found" "" 127)
+               (multiple-value-list (cmd "this-does-not-exist" :error :output))))
+    (is (equal '("test" "bash: this-does-not-exist: command not found" 127)
+               (multiple-value-list (cmd "echo test && this-does-not-exist"))))
+    (is (equal '("bash: this-does-not-exist: command not found" "test" 127)
+               (multiple-value-list (cmd "echo test && this-does-not-exist"
+                                         :output :error
+                                         :error :output))))
+    (is (equal '("test
+bash: this-does-not-exist: command not found" "" 127)
+               (multiple-value-list (cmd "echo test && this-does-not-exist"
+                                         :output t :error :output))))
+    (is (equal '("" "test
+bash: this-does-not-exist: command not found" 127)
+               (multiple-value-list (cmd "echo test && this-does-not-exist"
+                                         :output :error :error t))))
+    ;; Error on return value
+    (is (eql :correct (handler-case
+                          (cmd "this-does-not-exist" :error-on-exit-codes '(127))
+                        (error () :correct))))
+    (is (eql :correct (handler-case
+                          (cmd "this-does-not-exist" :error-unless-exit-codes '(0))
+                        (error () :correct))))
+    ;; Error on output to standard error
+    (is (eql :correct (handler-case
+                          (cmd "this-does-not-exist" :on-error-output :error)
+                        (error () :correct))))
+    (is (eql :correct (handler-case
+                          (cmd "this-does-not-exist" :on-error-output :warn)
+                        (warning () :correct))))
+    ;; ;; simple command
+    ;; (is (equal
+    ;;      "59  602 3998 test-input"
+    ;;      #>(wc "test-input")))
+    ;; ;; piping
+    ;; (is (equal
+    ;;      "10     104     700"
+    ;;      #>(tail "test-input" | wc | cat)))
+    ;; ;; return value
+
+    ;; ;; splitting
+
+    ;; ;; 
+    ))
+
+(deftest output-options ()
+  )
+
+(deftest input-options ()
+  )
+
+(deftest reader-macro-tests ()
+  (let ((*default-pathname-defaults*
+          (asdf:component-pathname
+           (asdf:find-system :clommand-test))))
+    ;; simple command
     (is (equal
          "59  602 3998 test-input"
          #>(wc "test-input")))
+    ;; piping
     (is (equal
          "10     104     700"
          #>(tail "test-input" | wc | cat)))
-    (is (equal
-         "10     107     708"
-         #>(head "test-input" | wc | cat)))))
+
+    ;; return value
+    #>x(cat test-input)
+
+    ;; splitting
+    #>/"\\n"(cat test-input)
+
+    ;; predicate mode
+    ))
 
 (deftest read-write ()
   (let ((*default-pathname-defaults*

@@ -19,18 +19,42 @@
 
 ;;<<>>=
 (defun cmd-process-status (process)
-  (let ((status (sb-ext:process-status
-                 (cmd-process-process-obj process))))
+  #+sbcl
+  (let ((status (if (cmd-process-p (cmd-process-process-obj process))
+                    ;; Sometimes they are nested
+                    (sb-ext:process-status
+                     (cmd-process-process-obj
+                      (cmd-process-process-obj process)))
+                    (sb-ext:process-status
+                     (cmd-process-process-obj process)))))
     (case status
       ((:stopped :running) status)
       (otherwise
        (sb-ext:process-exit-code
+        (cmd-process-process-obj process)))))
+  #+cmu
+  (let ((status (if (cmd-process-p (cmd-process-process-obj process))
+                    ;; Sometimes they are nested
+                    (ext:process-status
+                     (cmd-process-process-obj
+                      (cmd-process-process-obj process)))
+                    (ext:process-status
+                     (cmd-process-process-obj process)))))
+    (case status
+      ((:stopped :running) status)
+      (otherwise
+       (ext:process-exit-code
         (cmd-process-process-obj process))))))
 
 ;;<<>>=
+#+sbcl
+
+#+cmu
 (defun cmd-process-exit-code (process)
-  (sb-ext:process-wait (cmd-process-process-obj process))
-  (sb-ext:process-exit-code (cmd-process-process-obj process)))
+  (ext:process-wait (cmd-process-process-obj process))
+  (ext:process-exit-code (cmd-process-process-obj process)))
+#+ccl
+
 
 ;; @This is a user visible structure when the process is run in the background
 ;; via <<cmd-bg>>.

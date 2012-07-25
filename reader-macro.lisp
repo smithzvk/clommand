@@ -247,7 +247,7 @@ balance vertical bars.
                                ;; a delimiter
                                (let ((stream (make-concatenated-stream
                                               (make-string-input-stream
-                                               (mkstr possible-delim))
+                                               (%mkstr possible-delim))
                                               stream)))
                                  (push
                                   (list sym (read-preserving-whitespace
@@ -283,27 +283,28 @@ balance vertical bars.
                         '/' before the form or the pprce:split function itself.")
                  (read-char stream t nil t)
                  (push (read stream t nil t) breaker)))))))
-    `(let ,(mapcar (/. (x) (list (car x)
+    `(let ,(mapcar (lambda (x) (list (car x)
                                 `(translate-item
                                   (let ((*shell-input* nil)) ,(cadr x)))))
                    (reverse ext))
        ,(let* ((cmd-string
                  `(trim-enclosing-parens
                    (if *remove-newlines*
-                       (apply 'mkstr
+                       (apply '%mkstr
                               (mapcar
                                (lambda (x)
                                  (if (stringp x)
                                      (substitute #\Space #\Newline x)
                                      x))
                                ,(cons 'list command)))
-                       (mkstr ,@command)))))
+                       (%mkstr ,@command)))))
           (cond ((cmd-control-predicate-mode control)
                  (destructuring-bind (type arg) (cmd-control-predicate-mode control)
                    (case type
                      (:true
                       `(cmd-p ,cmd-string
                               :true-vals (list ,arg)
+                              :on-error-output ,(cmd-control-stderr control)
                               :error-on-exit-codes
                               ,(and (cmd-control-error-on-exit-code control)
                                     `(list ,(cmd-control-error-on-exit-code control)))
@@ -314,6 +315,7 @@ balance vertical bars.
                      (:false
                       `(cmd-p ,cmd-string
                               :false-vals (list ,arg)
+                              :on-error-output ,(cmd-control-stderr control)
                               :error-on-exit-codes
                               ,(and (cmd-control-error-on-exit-code control)
                                     `(list ,(cmd-control-error-on-exit-code control)))
@@ -326,21 +328,23 @@ balance vertical bars.
                        :output ,(if (cmd-control-foreground control)
                                     :string
                                     nil)
+                       :on-error-output ,(cmd-control-stderr control)
                        :error-on-exit-codes
                        ,(and (cmd-control-error-on-exit-code control)
                              `(list ,(cmd-control-error-on-exit-code control)))
                        :error-unless-exit-codes
                        ,(and (cmd-control-error-unless-exit-code control)
                              `(list ,(cmd-control-error-unless-exit-code control)))
-                       :split-on ,(if breaker (apply #'mkstr breaker)
+                       :split-on ,(if breaker (apply #'%mkstr breaker)
                                       (if (cmd-control-breaker control)
-                                          (mkstr
+                                          (%mkstr
                                            (cmd-control-breaker control))))))
                 (t
                  `(cmd-bg ,cmd-string
                           :output ,(if (cmd-control-foreground control)
                                        :string
                                        nil)
+                          :on-error-output ,(cmd-control-stderr control)
                           :error-on-exit-codes
                           ,(and (cmd-control-error-on-exit-code control)
                                 `(list ,(cmd-control-error-on-exit-code control)))
