@@ -33,6 +33,10 @@
   (sb-ext:process-wait (cmd-process-process-obj process))
   (sb-ext:process-exit-code (cmd-process-process-obj process)))
 
+(defun cmd-process-term (process)
+  (when (sb-ext:process-alive-p (cmd-process-process-obj process))
+    (sb-ext:process-kill (cmd-process-process-obj process) sb-posix:sigkill)))
+
 ;; Low level interface
 
 (defun %pipe (commands input output)

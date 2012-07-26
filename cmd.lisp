@@ -202,8 +202,7 @@
                                        trim-whitespace split-on)
                 "")
             (cmd-process-exit-code process)))
-      (when (sb-ext:process-alive-p (cmd-process-process-obj process))
-        (sb-ext:process-kill (cmd-process-process-obj process) sb-posix:sigkill))
+      (cmd-process-term process)
       (when (streamp (cmd-process-output process))
         (close (cmd-process-output process)))
       (when (streamp (cmd-process-error process))
@@ -272,9 +271,7 @@
                                (cmd-process-exit-code process)
                                error-unless-exit-codes
                                error-on-exit-codes exit-code-hook))
-                   (when (sb-ext:process-alive-p (cmd-process-process-obj process))
-                     (sb-ext:process-kill
-                      (cmd-process-process-obj process) sb-posix:sigkill))
+                   (cmd-process-term process)
                    (when (streamp (cmd-process-output process))
                      (close (cmd-process-output process)))
                    (when (streamp (cmd-process-error process))
