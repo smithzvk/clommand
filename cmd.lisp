@@ -170,23 +170,11 @@
                  (output-pipe (cl-plumbing:make-two-way-pipe))
                  (error-pipe (cl-plumbing:make-two-way-pipe))
                  (error-cache (make-string-output-stream)))
-             (iter
-               (for out-char = (read-char-no-hang output-str nil :eof nil))
-               (when out-char
-                 (format output-pipe "~A" out-char))
-               (when (eql #\Newline out-char)
-                 (format output-collector
-                         "~A" (cl-plumbing:get-pipe-outlet-string output-pipe)))
-               (for err-char = (read-char-no-hang error-str nil :eof nil))
-               (when err-char
-                 (format error-pipe "~A" err-char))
-               (when (eql #\Newline err-char)
-                 (let ((line (cl-plumbing:get-pipe-outlet-string error-pipe)))
-                   (handle-error-output on-error-output line error-collector
-                                        error-cache)))
-               (unless (or out-char err-char)
-                 (sleep *shell-spawn-time*))
-               (until (and (eql :eof out-char) (eql :eof err-char))))
+             (fair-process-output output-str error-str
+                                  output-pipe error-pipe
+                                  output-collector error-collector
+                                  error-cache
+                                  on-error-output)
              (handle-exit-code command
                                (get-output-stream-string error-cache)
                                (cmd-process-exit-code process)
@@ -207,6 +195,34 @@
         (close (cmd-process-output process)))
       (when (streamp (cmd-process-error process))
         (close (cmd-process-error process))))))
+
+(defun fair-process-output (output-str error-str
+                            output-pipe error-pipe
+                            output-collector error-collector
+                            error-cache
+                            on-error-output)
+  (iter
+    (for out-char = (if output-str
+                        (read-char-no-hang output-str nil :eof nil)
+                        :eof))
+    (when out-char
+      (format output-pipe "~A" out-char))
+    (when (eql #\Newline out-char)
+      (format output-collector
+              "~A" (cl-plumbing:get-pipe-outlet-string output-pipe)))
+    (for err-char = (if error-str
+                        (read-char-no-hang error-str nil :eof nil)
+                        :eof))
+    (when err-char
+      (format error-pipe "~A" err-char))
+    (when (eql #\Newline err-char)
+      (let ((line (cl-plumbing:get-pipe-outlet-string error-pipe)))
+        (handle-error-output on-error-output line error-collector
+                             error-cache)))
+    (until (and (eql :eof out-char) (eql :eof err-char)))
+    (when (and (member out-char '(:eof nil))
+               (member err-char '(:eof nil)))
+      (sleep *shell-spawn-time*))))
 
 (defun cmd-bg (command &key (input *shell-input*)
                             (output t)
@@ -249,23 +265,11 @@
                             (error-cache (make-string-output-stream))
                             (output-pipe (cl-plumbing:make-two-way-pipe))
                             (error-pipe (cl-plumbing:make-two-way-pipe)))
-                        (iter
-                          (for out-char = (read-char-no-hang output-str nil :eof nil))
-                          (when out-char
-                            (format output-pipe "~A" out-char))
-                          (when (eql #\Newline out-char)
-                            (format output-collector
-                                    "~A" (cl-plumbing:get-pipe-outlet-string output-pipe)))
-                          (for err-char = (read-char-no-hang error-str nil :eof nil))
-                          (when err-char
-                            (format error-pipe "~A" err-char))
-                          (when (eql #\Newline err-char)
-                            (let ((line (cl-plumbing:get-pipe-outlet-string error-pipe)))
-                              (handle-error-output on-error-output line error-collector
-                                                   error-cache)))
-                          (unless (or out-char err-char)
-                            (sleep *shell-spawn-time*))
-                          (until (and (eql :eof out-char) (eql :eof err-char))))
+                        (fair-process-output output-str error-str
+                                             output-pipe error-pipe
+                                             output-collector error-collector
+                                             error-cache
+                                             on-error-output)
                         (handle-exit-code command
                                (get-output-stream-string error-cache)
                                (cmd-process-exit-code process)
