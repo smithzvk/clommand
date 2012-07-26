@@ -7,7 +7,8 @@
   "A package for using the shell easily and uniformly from Common Lisps"
   :components ((:file "package")
                (:file "string-helpers")
-               (:file
+               #+ecl (:file "cmd-ecl")
+               #-ecl (:file
                 #+sbcl "cmd-sbcl"
                 #+cmu "cmd-cmucl"
                 #+clisp "cmd-clisp"
