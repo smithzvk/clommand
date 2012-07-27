@@ -104,6 +104,7 @@ With *remove-newlines* non-nil, the command above could look like:
           ((#\&) (setf (cmd-control-foreground control) nil))
           ((#\e #\E) (setf (cmd-control-stderr control) :error))
           ((#\w #\W) (setf (cmd-control-stderr control) :warn))
+          ((#\o #\O) (setf (cmd-control-stderr control) :output))
           (#\/ (setf (cmd-control-breaker control)
                      (case (peek-char nil in nil)
                        ((#\# #\") (read in))
@@ -146,10 +147,12 @@ The Control String:
       directly followed by a '!' (preceeding the integer, if it is given), then
       anything but that number is an error.
 
-  e : Interpret any output on standard error as an error instead of mixing it
-      into standard output.
+  o : Send output on standard error directly to standard output.
 
-  w : Like 'e' except raise a warning instead of an error.
+  e : Interpret any output on standard error as an error.
+
+  w : Like 'e' except raise a warning instead of an error then send it to
+      standard error (the default).
 
   & : Run the command in the background.  This will return a cmd-process
       structure.
@@ -328,7 +331,12 @@ balance vertical bars.
                        :output ,(if (cmd-control-foreground control)
                                     :string
                                     nil)
-                       :on-error-output ,(cmd-control-stderr control)
+                       ,@(when (eql :output (cmd-control-stderr control))
+                           (list :error :output))
+                       :on-error-output
+                       ,(if (eql :output (cmd-control-stderr control))
+                            nil
+                            (cmd-control-stderr control))
                        :error-on-exit-codes
                        ,(and (cmd-control-error-on-exit-code control)
                              `(list ,(cmd-control-error-on-exit-code control)))
@@ -344,7 +352,12 @@ balance vertical bars.
                           :output ,(if (cmd-control-foreground control)
                                        :string
                                        nil)
-                          :on-error-output ,(cmd-control-stderr control)
+                          ,@(when (eql :output (cmd-control-stderr control))
+                              (list :error :output))
+                          :on-error-output
+                          ,(if (eql :output (cmd-control-stderr control))
+                               nil
+                               (cmd-control-stderr control))
                           :error-on-exit-codes
                           ,(and (cmd-control-error-on-exit-code control)
                                 `(list ,(cmd-control-error-on-exit-code control)))

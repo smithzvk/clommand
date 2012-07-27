@@ -134,7 +134,7 @@
 (defun cmd (command &key (input *shell-input*)
                          (output t)
                          (error t)
-                         (on-error-output nil)
+                         on-error-output
                          (split-on nil) (trim-whitespace t)
                          error-on-exit-codes
                          error-unless-exit-codes
@@ -227,7 +227,7 @@
 (defun cmd-bg (command &key (input *shell-input*)
                             (output t)
                             (error t)
-                            (on-error-output nil)
+                            on-error-output
                             error-on-exit-codes
                             error-unless-exit-codes
                             exit-code-hook)
@@ -290,19 +290,24 @@
 
 (defun cmd-p (command &key (true-vals '(0)) (false-vals '(1))
                            (input *shell-input*)
+                           (output t)
+                           (error t)
                            on-error-output
+                           (split-on nil) (trim-whitespace t)
                            error-on-exit-codes
                            error-unless-exit-codes
                            exit-code-hook)
   "Run a shell command as a predicate"
   (multiple-value-bind (output error-output exit-code)
-          (cmd command :input input
-                       :output t
-                       :error t
-                       :on-error-output on-error-output
-                       :error-on-exit-codes error-on-exit-codes
-                       :error-unless-exit-codes error-unless-exit-codes
-                       :exit-code-hook exit-code-hook)
+      (cmd command :input input
+                   :output output
+                   :error error
+                   :on-error-output on-error-output
+                   :error-on-exit-codes error-on-exit-codes
+                   :error-unless-exit-codes error-unless-exit-codes
+                   :exit-code-hook exit-code-hook
+                   :split-on split-on
+                   :trim-whitespace trim-whitespace)
     (cond ((member exit-code true-vals) output)
           ((member exit-code false-vals) nil)
           (t (cerror "Return NIL"
