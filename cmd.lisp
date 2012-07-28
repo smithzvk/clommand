@@ -167,8 +167,8 @@
                  (error-collector (if (eql error :output)
                                       output-collector
                                       error-collector))
-                 (output-pipe (cl-plumbing:make-two-way-pipe))
-                 (error-pipe (cl-plumbing:make-two-way-pipe))
+                 (output-pipe (cl-plumbing:make-pipe))
+                 (error-pipe (cl-plumbing:make-pipe))
                  (error-cache (make-string-output-stream)))
              (fair-process-output output-str error-str
                                   output-pipe error-pipe
@@ -205,19 +205,27 @@
     (for out-char = (if output-str
                         (read-char-no-hang output-str nil :eof nil)
                         :eof))
-    (when out-char
-      (format output-pipe "~A" out-char))
+    (cond ((eql :eof out-char)
+           (close (first output-pipe)))
+          (out-char
+           (format (first output-pipe) "~A" out-char)))
     (when (eql #\Newline out-char)
-      (format output-collector
-              "~A" (cl-plumbing:get-pipe-outlet-string output-pipe)))
+      (format (if (listp output-collector)
+                  (first output-collector)
+                  output-collector)
+              "~A" (cl-plumbing:get-pipe-outlet-string (second output-pipe))))
     (for err-char = (if error-str
                         (read-char-no-hang error-str nil :eof nil)
                         :eof))
-    (when err-char
-      (format error-pipe "~A" err-char))
+    (cond ((eql :eof err-char)
+           (close (first error-pipe)))
+          (err-char
+           (format (first error-pipe) "~A" err-char)))
     (when (eql #\Newline err-char)
-      (let ((line (cl-plumbing:get-pipe-outlet-string error-pipe)))
-        (handle-error-output on-error-output line error-collector
+      (let ((line (cl-plumbing:get-pipe-outlet-string (second error-pipe))))
+        (handle-error-output on-error-output line (if (listp error-collector)
+                                                      (first error-collector)
+                                                      error-collector)
                              error-cache)))
     (until (and (eql :eof out-char) (eql :eof err-char)))
     (when (and (member out-char '(:eof nil))
@@ -245,8 +253,8 @@
                                       (apply '%mkdstr " " command)
                                       command)))
                 input :stream :stream)))
-    (let ((output-collector (cl-plumbing:make-two-way-pipe))
-          (error-collector (cl-plumbing:make-two-way-pipe))
+    (let ((output-collector (cl-plumbing:make-pipe))
+          (error-collector (cl-plumbing:make-pipe))
           (error-str (cmd-process-error process))
           (output-str (cmd-process-output process)))
       (bt:with-lock-held (*jobs-lock*)
@@ -263,28 +271,30 @@
                                                  output-collector
                                                  error-collector))
                             (error-cache (make-string-output-stream))
-                            (output-pipe (cl-plumbing:make-two-way-pipe))
-                            (error-pipe (cl-plumbing:make-two-way-pipe)))
+                            (output-pipe (cl-plumbing:make-pipe))
+                            (error-pipe (cl-plumbing:make-pipe)))
                         (fair-process-output output-str error-str
                                              output-pipe error-pipe
                                              output-collector error-collector
                                              error-cache
                                              on-error-output)
                         (handle-exit-code command
-                               (get-output-stream-string error-cache)
-                               (cmd-process-exit-code process)
-                               error-unless-exit-codes
-                               error-on-exit-codes exit-code-hook))
+                                          (get-output-stream-string error-cache)
+                                          (cmd-process-exit-code process)
+                                          error-unless-exit-codes
+                                          error-on-exit-codes exit-code-hook))
                    (cmd-process-term process)
                    (when (streamp (cmd-process-output process))
                      (close (cmd-process-output process)))
                    (when (streamp (cmd-process-error process))
-                     (close (cmd-process-error process))))))))
+                     (close (cmd-process-error process)))
+                   (close (first output-collector))
+                   (close (first error-collector)))))))
         (values
          (make-cmd-process
           :input input
-          :output output-collector
-          :error error-collector
+          :output (second output-collector)
+          :error (second error-collector)
           :process-obj process)
          thread)))))
 
