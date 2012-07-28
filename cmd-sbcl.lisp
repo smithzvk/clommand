@@ -6,20 +6,19 @@
 (defstruct cmd-process
   input output error process-obj)
 
+(defun raw-process-obj (process)
+  (if (sb-ext:process-p process)
+      process
+      (raw-process-obj (cmd-process-process-obj process))))
+
 ;;<<>>=
 (defun cmd-process-status (process)
-  (let ((status (if (cmd-process-p (cmd-process-process-obj process))
-                    ;; Sometimes they are nested
-                    (sb-ext:process-status
-                     (cmd-process-process-obj
-                      (cmd-process-process-obj process)))
-                    (sb-ext:process-status
-                     (cmd-process-process-obj process)))))
+  (let* ((raw-process (raw-process-obj process))
+         (status (sb-ext:process-status raw-process)))
     (case status
       ((:stopped :running) status)
       (otherwise
-       (sb-ext:process-exit-code
-        (cmd-process-process-obj process))))))
+       (sb-ext:process-exit-code raw-process)))))
 
 (defun cmd-process-exit-code (process)
   ;; ;; This is an alternate implementation that sometimes works even if your
@@ -30,12 +29,12 @@
 
   ;; This should work, but it doesn't if you are sending signals to your
   ;; processes
-  (sb-ext:process-wait (cmd-process-process-obj process))
-  (sb-ext:process-exit-code (cmd-process-process-obj process)))
+  (sb-ext:process-wait (raw-process-obj process))
+  (sb-ext:process-exit-code (raw-process-obj process)))
 
 (defun cmd-process-term (process)
-  (when (sb-ext:process-alive-p (cmd-process-process-obj process))
-    (sb-ext:process-kill (cmd-process-process-obj process) sb-posix:sigkill)))
+  (when (sb-ext:process-alive-p (raw-process-obj process))
+    (sb-ext:process-kill (raw-process-obj process) sb-posix:sigkill)))
 
 ;; Low level interface
 
