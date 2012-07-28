@@ -7,4 +7,4 @@
   "Tests for Clommand"
   :components ((:file "test"))
   :serial t
-  :depends-on (:stefil :iterate :clommand))
+  :depends-on (:stefil :iterate :clommand :cl-interpol))

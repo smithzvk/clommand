@@ -1,9 +1,14 @@
 
 (defpackage :clommand-test
   (:use :cl :stefil :iterate :clommand :cl-ppcre)
-  (:export #:shell-test))
+  (:export #:simple-commands-reader-macro
+           #:simple-commands
+           #:run-tests
+           #:background-commands))
 
 (in-package :clommand-test)
+
+(cl-interpol:enable-interpol-syntax)
 
 (in-root-suite)
 
@@ -20,6 +25,10 @@
 ;; \item wc
 
 ;; \end{enumerate}
+
+(defun run-tests ()
+  (simple-commands)
+  (simple-commands-reader-macro))
 
 (deftest simple-commands ()
   (let ((*default-pathname-defaults*
@@ -44,12 +53,10 @@
                (multiple-value-list (cmd "echo test && this-does-not-exist"
                                          :output :error
                                          :error :output))))
-    (is (equal '("test
-bash: this-does-not-exist: command not found" "" 127)
+    (is (equal '(#?"test\nbash: this-does-not-exist: command not found" "" 127)
                (multiple-value-list (cmd "echo test && this-does-not-exist"
                                          :output t :error :output))))
-    (is (equal '("" "test
-bash: this-does-not-exist: command not found" 127)
+    (is (equal '("" #?"test\nbash: this-does-not-exist: command not found" 127)
                (multiple-value-list (cmd "echo test && this-does-not-exist"
                                          :output :error :error t))))
     ;; Error on return value
@@ -66,19 +73,108 @@ bash: this-does-not-exist: command not found" 127)
     (is (eql :correct (handler-case
                           (cmd "this-does-not-exist" :on-error-output :warn)
                         (warning () :correct))))
-    ;; ;; simple command
-    ;; (is (equal
-    ;;      "59  602 3998 test-input"
-    ;;      #>(wc "test-input")))
-    ;; ;; piping
-    ;; (is (equal
-    ;;      "10     104     700"
-    ;;      #>(tail "test-input" | wc | cat)))
-    ;; ;; return value
+    ;; piping
 
-    ;; ;; splitting
+    ;; splitting
+    ))
 
-    ;; ;; 
+(deftest simple-commands-reader-macro ()
+  (let ((*default-pathname-defaults*
+          (asdf:component-pathname
+           (asdf:find-system :clommand-test))))
+    ;; Controlling string output
+    (is (equal '("test" "" 0)
+               (multiple-value-list #>(echo test))))
+    (is (equal '("" "bash: this-does-not-exist: command not found" 127)
+               (multiple-value-list #>w(this-does-not-exist))))
+    (is (equal '("bash: this-does-not-exist: command not found" "" 127)
+               (multiple-value-list #>o(this-does-not-exist))))
+    (is (equal '("test" "bash: this-does-not-exist: command not found" 127)
+               (multiple-value-list #>w(echo test && this-does-not-exist))))
+
+    (is (equal '("test\nbash: this-does-not-exist: command not found" "" 127)
+               (multiple-value-list #>o(echo test && this-does-not-exist))))
+    ;; Error on return value
+    (is (eql :correct (handler-case
+                          #>x!127(this-does-not-exist)
+                          (error () :correct))))
+    (is (eql :correct (handler-case
+                          #>x0(this-does-not-exist)
+                          (error () :correct))))
+    ;; Error on output to standard error
+    (is (eql :correct (handler-case
+                          #>e(this-does-not-exist)
+                          (error () :correct))))
+    (is (eql :correct (handler-case
+                          #>w(this-does-not-exist)
+                          (warning () :correct))))
+    ;; splitting
+
+    ))
+
+(defun slurp-stream (stream)
+  "Slurp the output of a stream."
+  (coerce
+   (iter (for c in-stream stream using #'read-char)
+     (collecting c result-type 'vector))
+   'string))
+
+(defun slurp-process-output (process)
+  "Take a process structure and return the output as it would appear if it ran
+in the foreground."
+  (list (slurp-stream (clommand::cmd-process-output process))
+        (slurp-stream (clommand::cmd-process-error process))
+        (clommand::cmd-process-exit-code process)))
+
+(deftest background-commands ()
+  (let ((*default-pathname-defaults*
+          (asdf:component-pathname
+           (asdf:find-system :clommand-test))))
+    ;; Controlling string output
+    (is (equal '(#?"test\n" "" 0)
+               (slurp-process-output (cmd-bg "echo test"))))
+    (is (equal '("" "" 0)
+               (slurp-process-output (cmd-bg "echo test" :output nil))))
+    (is (equal '("" #?"test\n" 0)
+               (slurp-process-output (cmd-bg "echo test" :output :error))))
+    (is (equal '("" "" 0)
+               (slurp-process-output (cmd-bg "echo test" :output :error :error nil))))
+    (is (equal '("" #?"bash: this-does-not-exist: command not found\n\n" 127)
+               (slurp-process-output (cmd-bg "this-does-not-exist"))))
+    (is (equal '(#?"bash: this-does-not-exist: command not found\n\n" "" 127)
+               (slurp-process-output (cmd-bg "this-does-not-exist" :error :output))))
+    (is (equal '(#?"test\n" #?"bash: this-does-not-exist: command not found\n\n" 127)
+               (slurp-process-output (cmd-bg "echo test && this-does-not-exist"))))
+    (is (equal '(#?"bash: this-does-not-exist: command not found\n\n" #?"test\n" 127)
+               (slurp-process-output (cmd-bg "echo test && this-does-not-exist"
+                                             :output :error
+                                             :error :output))))
+    ;; (is (equal '(#?"test\nbash: this-does-not-exist: command not found" "" 127)
+    ;;            (slurp-process-output (cmd "echo test && this-does-not-exist"
+    ;;                                      :output t :error :output))))
+    ;; (is (equal '("" #?"test\nbash: this-does-not-exist: command not found" 127)
+    ;;            (slurp-process-output (cmd "echo test && this-does-not-exist"
+    ;;                                      :output :error :error t))))
+
+    ;; ;; Error on return value
+    ;; (is (eql :correct (handler-case
+    ;;                       (cmd "this-does-not-exist" :error-on-exit-codes '(127))
+    ;;                     (error () :correct))))
+    ;; (is (eql :correct (handler-case
+    ;;                       (cmd "this-does-not-exist" :error-unless-exit-codes '(0))
+    ;;                     (error () :correct))))
+    ;; ;; Error on output to standard error
+    ;; (is (eql :correct (handler-case
+    ;;                       (cmd "this-does-not-exist" :on-error-output :error)
+    ;;                     (error () :correct))))
+    ;; (is (eql :correct (handler-case
+    ;;                       (cmd "this-does-not-exist" :on-error-output :warn)
+    ;;                     (warning () :correct))))
+
+    ;; piping
+    ;; return value
+
+    ;; splitting
     ))
 
 (deftest output-options ()
