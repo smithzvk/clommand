@@ -156,17 +156,23 @@
     (unwind-protect
          (let ((output-collector (make-string-output-stream))
                (error-collector (make-string-output-stream))
+               ;; The null collector is a dead end for output
+               (null-collector (make-string-output-stream))
                (error-str (cmd-process-error process))
                (output-str (cmd-process-output process)))
            (bt:with-lock-held (*jobs-lock*)
              (remove-completed-jobs)
              (push process *jobs*))
-           (let ((output-collector (if (eql output :error)
-                                       error-collector
-                                       output-collector))
-                 (error-collector (if (eql error :output)
-                                      output-collector
-                                      error-collector))
+           (let ((output-collector (cond ((eql output :error)
+                                          error-collector)
+                                         (output
+                                          output-collector)
+                                         (t null-collector)))
+                 (error-collector (cond ((eql error :output)
+                                         output-collector)
+                                        (error
+                                         error-collector)
+                                        (t null-collector)))
                  (output-pipe (cl-plumbing:make-pipe))
                  (error-pipe (cl-plumbing:make-pipe))
                  (error-cache (make-string-output-stream)))
@@ -181,14 +187,10 @@
                                error-unless-exit-codes
                                error-on-exit-codes exit-code-hook))
            (values
-            (if output
-                (process-output-string (get-output-stream-string output-collector)
-                                       trim-whitespace split-on)
-                "")
-            (if error
-                (process-output-string (get-output-stream-string error-collector)
-                                       trim-whitespace split-on)
-                "")
+            (process-output-string (get-output-stream-string output-collector)
+                                   trim-whitespace split-on)
+            (process-output-string (get-output-stream-string error-collector)
+                                   trim-whitespace split-on)
             (cmd-process-exit-code process)))
       (cmd-process-term process)
       (when (streamp (cmd-process-output process))
@@ -255,6 +257,8 @@
                 input :stream :stream)))
     (let ((output-collector (cl-plumbing:make-pipe))
           (error-collector (cl-plumbing:make-pipe))
+          ;; The null collector is a dead end for output
+          (null-collector (cl-plumbing:make-pipe))
           (error-str (cmd-process-error process))
           (output-str (cmd-process-output process)))
       (bt:with-lock-held (*jobs-lock*)
@@ -264,12 +268,16 @@
               (bt:make-thread
                (lambda ()
                  (unwind-protect
-                      (let ((output-collector (if (eql output :error)
-                                                  error-collector
-                                                  output-collector))
-                            (error-collector (if (eql error :output)
-                                                 output-collector
-                                                 error-collector))
+                      (let ((output-collector (cond ((eql output :error)
+                                                     error-collector)
+                                                    (output
+                                                     output-collector)
+                                                    (t null-collector)))
+                            (error-collector (cond ((eql error :output)
+                                                    output-collector)
+                                                    (error
+                                                     error-collector)
+                                                    (t null-collector)))
                             (error-cache (make-string-output-stream))
                             (output-pipe (cl-plumbing:make-pipe))
                             (error-pipe (cl-plumbing:make-pipe)))

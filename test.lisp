@@ -28,7 +28,8 @@
 
 (defun run-tests ()
   (simple-commands)
-  (simple-commands-reader-macro))
+  (simple-commands-reader-macro)
+  (background-commands))
 
 (deftest simple-commands ()
   (let ((*default-pathname-defaults*
@@ -41,7 +42,7 @@
                (multiple-value-list (cmd "echo test" :output nil))))
     (is (equal '("" "test" 0)
                (multiple-value-list (cmd "echo test" :output :error))))
-    (is (equal '("" "" 0)
+    (is (equal '("" "test" 0)
                (multiple-value-list (cmd "echo test" :output :error :error nil))))
     (is (equal '("" "bash: this-does-not-exist: command not found" 127)
                (multiple-value-list (cmd "this-does-not-exist"))))
@@ -92,7 +93,7 @@
     (is (equal '("test" "bash: this-does-not-exist: command not found" 127)
                (multiple-value-list #>w(echo test && this-does-not-exist))))
 
-    (is (equal '("test\nbash: this-does-not-exist: command not found" "" 127)
+    (is (equal '(#?"test\nbash: this-does-not-exist: command not found" "" 127)
                (multiple-value-list #>o(echo test && this-does-not-exist))))
     ;; Error on return value
     (is (eql :correct (handler-case
@@ -137,7 +138,7 @@ in the foreground."
                (slurp-process-output (cmd-bg "echo test" :output nil))))
     (is (equal '("" #?"test\n" 0)
                (slurp-process-output (cmd-bg "echo test" :output :error))))
-    (is (equal '("" "" 0)
+    (is (equal '("" #?"test\n" 0)
                (slurp-process-output (cmd-bg "echo test" :output :error :error nil))))
     (is (equal '("" #?"bash: this-does-not-exist: command not found\n\n" 127)
                (slurp-process-output (cmd-bg "this-does-not-exist"))))
