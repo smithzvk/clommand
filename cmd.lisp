@@ -232,7 +232,18 @@
     (until (and (eql :eof out-char) (eql :eof err-char)))
     (when (and (member out-char '(:eof nil))
                (member err-char '(:eof nil)))
-      (sleep *shell-spawn-time*))))
+      (sleep *shell-spawn-time*))
+    (finally
+     (format (if (listp output-collector)
+                 (first output-collector)
+                 output-collector)
+             "~A" (cl-plumbing:get-pipe-outlet-string (second output-pipe)))
+     (handle-error-output on-error-output
+                          (cl-plumbing:get-pipe-outlet-string (second error-pipe))
+                          (if (listp error-collector)
+                              (first error-collector)
+                              error-collector)
+                          error-cache))))
 
 (defun cmd-bg (command &key (input *shell-input*)
                             (output t)
