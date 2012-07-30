@@ -97,8 +97,8 @@
            (t (error
                "I don't know how to deal with ~A for option on-error-output"
                on-error-output)))))
-  (format error-cache "~A~%" line)
-  (format error-collector "~A~%" line))
+  (format error-cache "~A" line)
+  (format error-collector "~A" line))
 
 (defun handle-exit-code (command error-cache exit-code
                          error-unless-exit-codes error-on-exit-codes exit-code-hook)

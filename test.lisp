@@ -140,13 +140,13 @@ in the foreground."
                (slurp-process-output (cmd-bg "echo test" :output :error))))
     (is (equal '("" #?"test\n" 0)
                (slurp-process-output (cmd-bg "echo test" :output :error :error nil))))
-    (is (equal '("" #?"bash: this-does-not-exist: command not found\n\n" 127)
+    (is (equal '("" #?"bash: this-does-not-exist: command not found\n" 127)
                (slurp-process-output (cmd-bg "this-does-not-exist"))))
-    (is (equal '(#?"bash: this-does-not-exist: command not found\n\n" "" 127)
+    (is (equal '(#?"bash: this-does-not-exist: command not found\n" "" 127)
                (slurp-process-output (cmd-bg "this-does-not-exist" :error :output))))
-    (is (equal '(#?"test\n" #?"bash: this-does-not-exist: command not found\n\n" 127)
+    (is (equal '(#?"test\n" #?"bash: this-does-not-exist: command not found\n" 127)
                (slurp-process-output (cmd-bg "echo test && this-does-not-exist"))))
-    (is (equal '(#?"bash: this-does-not-exist: command not found\n\n" #?"test\n" 127)
+    (is (equal '(#?"bash: this-does-not-exist: command not found\n" #?"test\n" 127)
                (slurp-process-output (cmd-bg "echo test && this-does-not-exist"
                                              :output :error
                                              :error :output))))
